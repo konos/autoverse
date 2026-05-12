@@ -1,284 +1,203 @@
 /**
- * Unit tests for ProfileStore — mocks Electron safeStorage and fs.
- * Run with: npx ts-node src/main/services/__tests__/profile-store.test.ts
+ * Unit tests for ProfileStore — mocks Electron safeStorage/app and fs.
  *
- * Tests cover:
+ * Tests:
  *  - saveProfile / getProfile round-trip
  *  - clearProfile deletes file
  *  - getProfile returns null when no file
  *  - safeStorage unavailable → throws (never stores plaintext)
- *  - decryptString failure → deletes file, throws
+ *  - decryptString failure → deletes corrupted file, throws
  *  - JSON parse failure → deletes file, throws
- *  - malformed inputs (empty profile, null fanId boundary)
+ *  - repeated saves (idempotent overwrite)
+ *  - minimal profile (only fanId)
  */
-
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-// ---- Minimal stubs for Electron modules -----
-// We stub `electron` before importing ProfileStore
+// ── vi.hoisted: declare mocks before the module factory runs ─────────────────
+// vi.mock is hoisted to the top of the file; any variables it references must
+// also be hoisted via vi.hoisted() so they exist at hoist time.
 
-const fakeEncrypted = Buffer.from("FAKE_ENCRYPTED");
+const { mockSafeStorage, getMockUserDataPath, setMockUserDataPath } = vi.hoisted(() => {
+  let _path = "";
+  const storage = {
+    isEncryptionAvailable: vi.fn(() => true),
+    encryptString: vi.fn((s: string) => {
+      const prefix = Buffer.from("FAKE_ENC:");
+      return Buffer.concat([prefix, Buffer.from(s)]);
+    }),
+    decryptString: vi.fn((buf: Buffer): string => {
+      const prefix = Buffer.from("FAKE_ENC:");
+      return buf.slice(prefix.length).toString();
+    }),
+  };
+  return {
+    mockSafeStorage: storage,
+    getMockUserDataPath: () => _path,
+    setMockUserDataPath: (p: string) => { _path = p; },
+  };
+});
 
-let encryptionAvailable = true;
-let decryptShouldThrow = false;
-let decryptCorruptJson = false;
-
-const mockSafeStorage = {
-  isEncryptionAvailable: () => encryptionAvailable,
-  encryptString: (s: string) => Buffer.concat([fakeEncrypted, Buffer.from(s)]),
-  decryptString: (buf: Buffer): string => {
-    if (decryptShouldThrow) throw new Error("decryption failure");
-    if (decryptCorruptJson) return "{invalid json}}";
-    // strip the fake prefix
-    return buf.slice(fakeEncrypted.length).toString();
+vi.mock("electron", () => ({
+  safeStorage: mockSafeStorage,
+  app: {
+    getPath: vi.fn(() => getMockUserDataPath()),
   },
-};
+}));
 
-// Patch app.getPath to a temp dir
-let tmpDir = "";
+// Import AFTER mock declaration
+import { ProfileStore } from "../profile-store";
 
-// We use Node's module system to inject mocks before the module loads.
-// Since ts-node re-uses require cache, we reset manually per-test-suite.
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// --- Inline re-implementation for testing (mirrors profile-store.ts logic) ---
-// This approach avoids needing jest/vitest mocking; we test the same code paths
-// by replicating the class with injectable dependencies.
+function makeStore(): { store: ProfileStore; dir: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ps-test-"));
+  setMockUserDataPath(dir);
 
-interface Profile {
-  fanId: number;
-  phone?: string;
-  birthDate?: string;
-  name?: string;
+  // Reset mocks to default (working) behaviour
+  mockSafeStorage.isEncryptionAvailable.mockReturnValue(true);
+  mockSafeStorage.encryptString.mockImplementation((s: string) => {
+    const prefix = Buffer.from("FAKE_ENC:");
+    return Buffer.concat([prefix, Buffer.from(s)]);
+  });
+  mockSafeStorage.decryptString.mockImplementation((buf: Buffer): string => {
+    const prefix = Buffer.from("FAKE_ENC:");
+    return buf.slice(prefix.length).toString();
+  });
+
+  return { store: new ProfileStore(), dir };
 }
 
-class TestableProfileStore {
-  private profilePath: string;
-  private safeStorage: typeof mockSafeStorage;
-
-  constructor(dir: string, storage: typeof mockSafeStorage) {
-    this.profilePath = path.join(dir, "profile.enc");
-    this.safeStorage = storage;
-  }
-
-  saveProfile(profile: Profile): void {
-    if (!this.safeStorage.isEncryptionAvailable()) {
-      throw new Error("safeStorage 암호화를 사용할 수 없습니다 — 평문 저장 거부");
-    }
-    const json = JSON.stringify(profile);
-    const encrypted = this.safeStorage.encryptString(json);
-    fs.writeFileSync(this.profilePath, encrypted);
-  }
-
-  getProfile(): Profile | null {
-    if (!fs.existsSync(this.profilePath)) return null;
-    if (!this.safeStorage.isEncryptionAvailable()) {
-      throw new Error("safeStorage 암호화를 사용할 수 없습니다 — 프로필 읽기 거부");
-    }
-    let buffer: Buffer;
-    try {
-      buffer = fs.readFileSync(this.profilePath);
-    } catch {
-      throw new Error("프로필 파일 읽기 실패");
-    }
-    let json: string;
-    try {
-      json = this.safeStorage.decryptString(buffer);
-    } catch {
-      this._deleteFile();
-      throw new Error("프로필 복호화 실패 — 프로필이 초기화되었습니다");
-    }
-    let profile: Profile;
-    try {
-      profile = JSON.parse(json) as Profile;
-    } catch {
-      this._deleteFile();
-      throw new Error("프로필 데이터 파싱 실패 — 프로필이 초기화되었습니다");
-    }
-    return profile;
-  }
-
-  clearProfile(): void {
-    if (fs.existsSync(this.profilePath)) {
-      this._deleteFile();
-    }
-  }
-
-  private _deleteFile(): void {
-    try {
-      fs.unlinkSync(this.profilePath);
-    } catch {
-      // ignore
-    }
-  }
-
-  fileExists(): boolean {
-    return fs.existsSync(this.profilePath);
-  }
+function cleanup(dir: string): void {
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// ---- Test harness ----
-let passed = 0;
-let failed = 0;
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
-function assert(condition: boolean, message: string): void {
-  if (!condition) {
-    console.log(`  FAIL: ${message}`);
-    failed++;
-  } else {
-    console.log(`  PASS: ${message}`);
-    passed++;
-  }
-}
+describe("ProfileStore.saveProfile / getProfile round-trip", () => {
+  it("saves and loads a full profile", () => {
+    const { store, dir } = makeStore();
+    const profile = {
+      fanId: 1234,
+      phone: "01012345678",
+      birthDate: "1990-05-15",
+      name: "테스트",
+    };
+    store.saveProfile(profile);
+    const loaded = store.getProfile();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.fanId).toBe(1234);
+    expect(loaded?.phone).toBe("01012345678");
+    expect(loaded?.birthDate).toBe("1990-05-15");
+    expect(loaded?.name).toBe("테스트");
+    cleanup(dir);
+  });
+});
 
-function assertThrows(fn: () => unknown, containing: string, message: string): void {
-  try {
-    fn();
-    console.log(`  FAIL: ${message} — expected throw but did not throw`);
-    failed++;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes(containing)) {
-      console.log(`  PASS: ${message}`);
-      passed++;
-    } else {
-      console.log(`  FAIL: ${message} — threw but message "${msg}" does not contain "${containing}"`);
-      failed++;
-    }
-  }
-}
+describe("ProfileStore.getProfile — no file", () => {
+  it("returns null when profile.enc is absent", () => {
+    const { store, dir } = makeStore();
+    expect(store.getProfile()).toBeNull();
+    cleanup(dir);
+  });
+});
 
-function setup(): { store: TestableProfileStore } {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "profile-store-test-"));
-  encryptionAvailable = true;
-  decryptShouldThrow = false;
-  decryptCorruptJson = false;
-  return { store: new TestableProfileStore(tmpDir, mockSafeStorage) };
-}
+describe("ProfileStore.clearProfile", () => {
+  it("deletes the file after save", () => {
+    const { store, dir } = makeStore();
+    store.saveProfile({ fanId: 42 });
+    const filePath = path.join(dir, "profile.enc");
+    expect(fs.existsSync(filePath)).toBe(true);
+    store.clearProfile();
+    expect(fs.existsSync(filePath)).toBe(false);
+    cleanup(dir);
+  });
 
-function cleanup(): void {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
-}
+  it("calling clearProfile when no file does not throw", () => {
+    const { store, dir } = makeStore();
+    expect(() => store.clearProfile()).not.toThrow();
+    cleanup(dir);
+  });
+});
 
-// Test 1: round-trip save/get
-{
-  console.log("\n[saveProfile / getProfile round-trip]");
-  const { store } = setup();
-  const profile: Profile = { fanId: 1234, phone: "01012345678", birthDate: "1990-05-15", name: "테스트" };
-  store.saveProfile(profile);
-  const loaded = store.getProfile();
-  assert(loaded !== null, "getProfile returns non-null after save");
-  assert(loaded?.fanId === 1234, "fanId matches");
-  assert(loaded?.phone === "01012345678", "phone matches");
-  assert(loaded?.birthDate === "1990-05-15", "birthDate matches");
-  assert(loaded?.name === "테스트", "name matches");
-  cleanup();
-}
+describe("ProfileStore — safeStorage unavailable", () => {
+  it("saveProfile throws and writes no file", () => {
+    const { store, dir } = makeStore();
+    mockSafeStorage.isEncryptionAvailable.mockReturnValue(false);
+    expect(() => store.saveProfile({ fanId: 99 })).toThrow("평문 저장 거부");
+    expect(fs.existsSync(path.join(dir, "profile.enc"))).toBe(false);
+    cleanup(dir);
+  });
 
-// Test 2: getProfile returns null when no file
-{
-  console.log("\n[getProfile — no file]");
-  const { store } = setup();
-  const result = store.getProfile();
-  assert(result === null, "returns null when profile.enc absent");
-  cleanup();
-}
+  it("getProfile throws when encryption unavailable and file exists", () => {
+    const { store, dir } = makeStore();
+    fs.writeFileSync(path.join(dir, "profile.enc"), Buffer.from("raw"));
+    mockSafeStorage.isEncryptionAvailable.mockReturnValue(false);
+    expect(() => store.getProfile()).toThrow("프로필 읽기 거부");
+    cleanup(dir);
+  });
+});
 
-// Test 3: clearProfile deletes file
-{
-  console.log("\n[clearProfile]");
-  const { store } = setup();
-  const profile: Profile = { fanId: 42 };
-  store.saveProfile(profile);
-  assert(store.fileExists(), "file exists after save");
-  store.clearProfile();
-  assert(!store.fileExists(), "file deleted after clearProfile");
-  // calling clear again should not throw
-  store.clearProfile();
-  assert(true, "clearProfile on missing file does not throw");
-  cleanup();
-}
+describe("ProfileStore — decryptString failure", () => {
+  it("throws and deletes the corrupted file", () => {
+    const { store, dir } = makeStore();
+    store.saveProfile({ fanId: 7 });
+    const filePath = path.join(dir, "profile.enc");
+    expect(fs.existsSync(filePath)).toBe(true);
 
-// Test 4: safeStorage unavailable — saveProfile throws, never stores plaintext
-{
-  console.log("\n[safeStorage unavailable]");
-  const { store } = setup();
-  encryptionAvailable = false;
-  assertThrows(
-    () => store.saveProfile({ fanId: 99 }),
-    "평문 저장 거부",
-    "saveProfile throws when encryption unavailable"
-  );
-  assert(!store.fileExists(), "no file written when encryption unavailable");
-  // getProfile with unavailable encryption (file somehow exists) — simulate by writing raw
-  fs.writeFileSync(path.join(tmpDir, "profile.enc"), Buffer.from("raw"));
-  assertThrows(
-    () => store.getProfile(),
-    "프로필 읽기 거부",
-    "getProfile throws when encryption unavailable"
-  );
-  cleanup();
-}
+    mockSafeStorage.decryptString.mockImplementation(() => {
+      throw new Error("decryption failure");
+    });
 
-// Test 5: decryptString failure → file deleted, throws
-{
-  console.log("\n[decryptString failure]");
-  const { store } = setup();
-  store.saveProfile({ fanId: 7 });
-  decryptShouldThrow = true;
-  assertThrows(
-    () => store.getProfile(),
-    "복호화 실패",
-    "getProfile throws on decrypt failure"
-  );
-  assert(!store.fileExists(), "corrupted file deleted after decrypt failure");
-  cleanup();
-}
+    expect(() => store.getProfile()).toThrow("복호화 실패");
+    expect(fs.existsSync(filePath)).toBe(false);
+    cleanup(dir);
+  });
+});
 
-// Test 6: JSON parse failure → file deleted, throws
-{
-  console.log("\n[JSON parse failure]");
-  const { store } = setup();
-  store.saveProfile({ fanId: 8 });
-  decryptCorruptJson = true;
-  assertThrows(
-    () => store.getProfile(),
-    "파싱 실패",
-    "getProfile throws on JSON parse failure"
-  );
-  assert(!store.fileExists(), "file deleted after JSON parse failure");
-  cleanup();
-}
+describe("ProfileStore — JSON parse failure", () => {
+  it("throws and deletes the file with corrupt JSON", () => {
+    const { store, dir } = makeStore();
+    store.saveProfile({ fanId: 8 });
+    const filePath = path.join(dir, "profile.enc");
 
-// Test 7: repeated saves (idempotent overwrite)
-{
-  console.log("\n[repeated saves]");
-  const { store } = setup();
-  store.saveProfile({ fanId: 1 });
-  store.saveProfile({ fanId: 2 });
-  const loaded = store.getProfile();
-  assert(loaded?.fanId === 2, "second save overwrites first");
-  cleanup();
-}
+    mockSafeStorage.decryptString.mockReturnValue("{invalid json}}");
 
-// Test 8: minimal profile (only fanId)
-{
-  console.log("\n[minimal profile]");
-  const { store } = setup();
-  store.saveProfile({ fanId: 0 });
-  const loaded = store.getProfile();
-  assert(loaded?.fanId === 0, "fanId=0 survives round-trip");
-  assert(loaded?.phone === undefined, "phone is undefined");
-  assert(loaded?.birthDate === undefined, "birthDate is undefined");
-  cleanup();
-}
+    expect(() => store.getProfile()).toThrow("파싱 실패");
+    expect(fs.existsSync(filePath)).toBe(false);
+    cleanup(dir);
+  });
+});
 
-// Summary
-console.log(`\n${"─".repeat(40)}`);
-if (failed === 0) {
-  console.log(`✓ All ${passed} tests passed\n`);
-} else {
-  console.error(`✗ ${failed} test(s) failed, ${passed} passed\n`);
-  process.exit(1);
-}
+describe("ProfileStore — repeated saves", () => {
+  it("second save overwrites the first", () => {
+    const { store, dir } = makeStore();
+    store.saveProfile({ fanId: 1 });
+    store.saveProfile({ fanId: 2 });
+    const loaded = store.getProfile();
+    expect(loaded?.fanId).toBe(2);
+    cleanup(dir);
+  });
+});
+
+describe("ProfileStore — minimal profile", () => {
+  it("fanId=0 survives round-trip without optional fields", () => {
+    const { store, dir } = makeStore();
+    store.saveProfile({ fanId: 0 });
+    const loaded = store.getProfile();
+    expect(loaded?.fanId).toBe(0);
+    expect(loaded?.phone).toBeUndefined();
+    expect(loaded?.birthDate).toBeUndefined();
+    cleanup(dir);
+  });
+
+  it("profile with all optional fields undefined is stable", () => {
+    const { store, dir } = makeStore();
+    store.saveProfile({ fanId: 100, phone: undefined, birthDate: undefined, name: undefined });
+    const loaded = store.getProfile();
+    expect(loaded?.fanId).toBe(100);
+    cleanup(dir);
+  });
+});
