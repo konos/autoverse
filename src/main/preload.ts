@@ -9,7 +9,8 @@ const api: IpcApi = {
   },
   profile: {
     save: (profile: Profile) => ipcRenderer.invoke("profile:save", profile),
-    load: () => ipcRenderer.invoke("profile:load"),
+    get: () => ipcRenderer.invoke("profile:get"),
+    clear: () => ipcRenderer.invoke("profile:clear"),
   },
   onAuthEvent: (cb: (event: AuthEvent) => void) => {
     const handler = (_: Electron.IpcRendererEvent, event: AuthEvent) => cb(event);

@@ -30,7 +30,8 @@ export interface IpcApi {
   };
   profile: {
     save: (profile: Profile) => Promise<void>;
-    load: () => Promise<Profile | null>;
+    get: () => Promise<Profile | null>;
+    clear: () => Promise<void>;
   };
   onAuthEvent: (cb: (event: AuthEvent) => void) => () => void;
 }
