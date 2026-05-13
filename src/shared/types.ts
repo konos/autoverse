@@ -151,6 +151,15 @@ export interface ApplyEvent {
   };
 }
 
+// ── Time synchronization (§6) ─────────────────────────────────────────────
+
+export interface TimeSyncResult {
+  offsetMs: number;    // serverNowMs - localNowMs (positive = server ahead)
+  rttMs: number;       // round-trip time in ms
+  serverTime: Date;    // server clock at response receipt
+  localTime: Date;     // local clock at midpoint of request
+}
+
 // ── Existing types ────────────────────────────────────────────────────────
 
 export interface AuthStatus {
