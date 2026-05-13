@@ -1,3 +1,15 @@
+// ── Log types ─────────────────────────────────────────────────────────────────
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+export interface LogEntry {
+  level: LogLevel;
+  timestamp: string; // ISO-8601
+  source: string;
+  message: string;
+  data?: Record<string, unknown>;
+}
+
 // ── Weverse Fanevent Apply API types (§3.2, §3.3) ──────────────────────────
 
 export interface ApplyPeriod {

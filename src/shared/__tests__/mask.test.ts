@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { maskToken, maskPhone, maskBirthDate } from "../mask";
+import { maskToken, maskPhone, maskBirthDate, maskMembershipNumber, maskName, maskSensitive } from "../mask";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,115 @@ describe("maskBirthDate", () => {
 
   it("shorter than 4 chars → preserves what is there", () => {
     expect(maskBirthDate("199")).toBe("199-**-**");
+  });
+});
+
+// ── maskMembershipNumber ──────────────────────────────────────────────────────
+
+describe("maskMembershipNumber", () => {
+  it("empty string → ****", () => {
+    expect(maskMembershipNumber("")).toBe("****");
+  });
+
+  it("short (< 4 chars) → ****", () => {
+    expect(maskMembershipNumber("123")).toBe("****");
+  });
+
+  it("shows only last 4 chars", () => {
+    expect(maskMembershipNumber("MEM123456")).toBe("****3456");
+  });
+
+  it("exactly 4 chars → shows all as suffix", () => {
+    expect(maskMembershipNumber("1234")).toBe("****1234");
+  });
+});
+
+// ── maskName ──────────────────────────────────────────────────────────────────
+
+describe("maskName", () => {
+  it("empty string → ***", () => {
+    expect(maskName("")).toBe("***");
+  });
+
+  it("single char → char + *", () => {
+    expect(maskName("J")).toBe("J*");
+  });
+
+  it("shows only first char + asterisks", () => {
+    expect(maskName("John")).toBe("J***");
+  });
+
+  it("Korean name → first char + asterisks", () => {
+    expect(maskName("김철수")).toBe("김**");
+  });
+});
+
+// ── maskSensitive ─────────────────────────────────────────────────────────────
+
+describe("maskSensitive", () => {
+  it("masks Authorization header value", () => {
+    const text = "Authorization: Bearer abcdefghijklmnopqrst1234567890uvwxyz";
+    const result = maskSensitive(text);
+    expect(result).toContain("Authorization:");
+    expect(result).not.toContain("Bearer abcdefghijklmnopqrst1234567890uvwxyz");
+  });
+
+  it("masks applyToken in JSON-like text", () => {
+    const text = `applyToken: "abcdefghijklmnopqrst1234567890uvwxyz12345"`;
+    const result = maskSensitive(text);
+    expect(result).toContain("applyToken:");
+    expect(result).not.toContain("abcdefghijklmnopqrst1234567890uvwxyz12345");
+  });
+
+  it("masks phoneNumber", () => {
+    const text = `phoneNumber: "01012345678"`;
+    const result = maskSensitive(text);
+    expect(result).toContain("phoneNumber:");
+    expect(result).toContain("****5678");
+  });
+
+  it("masks birthDate", () => {
+    const text = `birthDate: "1990-05-15"`;
+    const result = maskSensitive(text);
+    expect(result).toContain("birthDate:");
+    expect(result).toContain("1990-**-**");
+  });
+
+  it("masks membershipNumber", () => {
+    const text = `membershipNumber: "MEM98765"`;
+    const result = maskSensitive(text);
+    expect(result).toContain("membershipNumber:");
+    expect(result).toContain("****8765");
+  });
+
+  it("masks firstName", () => {
+    const text = `firstName: "Alice"`;
+    const result = maskSensitive(text);
+    expect(result).toContain("firstName:");
+    expect(result).toContain("A****");
+  });
+
+  it("masks lastName", () => {
+    const text = `lastName: "Smith"`;
+    const result = maskSensitive(text);
+    expect(result).toContain("lastName:");
+    expect(result).toContain("S****");
+  });
+
+  it("plain text with no sensitive data returns unchanged", () => {
+    const text = "user clicked the button at 10:00";
+    expect(maskSensitive(text)).toBe(text);
+  });
+
+  it("masks multiple fields in one string", () => {
+    const text = `phoneNumber: "01099998888", birthDate: "2000-01-01"`;
+    const result = maskSensitive(text);
+    expect(result).toContain("****8888");
+    expect(result).toContain("2000-**-**");
+  });
+
+  it("empty string returns empty string", () => {
+    expect(maskSensitive("")).toBe("");
   });
 });
 

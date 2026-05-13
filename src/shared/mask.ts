@@ -20,3 +20,36 @@ export function maskBirthDate(birthDate: string): string {
   if (!birthDate) return "****-**-**";
   return `${birthDate.slice(0, 4)}-**-**`;
 }
+
+/** Mask membership number: show only last 4 chars */
+export function maskMembershipNumber(num: string): string {
+  if (!num || num.length < 4) return "****";
+  return `****${num.slice(-4)}`;
+}
+
+/** Mask name: show only first char + asterisks */
+export function maskName(name: string): string {
+  if (!name) return "***";
+  if (name.length === 1) return `${name}*`;
+  return `${name[0]}${"*".repeat(name.length - 1)}`;
+}
+
+// R010 sensitive field patterns (key=value style in serialized objects/logs)
+const SENSITIVE_PATTERNS: Array<[RegExp, (match: string, key: string, val: string) => string]> = [
+  [/(Authorization:\s*)([^\s,}]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
+  [/(applyToken["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
+  [/(phoneNumber["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskPhone(v)}`],
+  [/(birthDate["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskBirthDate(v)}`],
+  [/(membershipNumber["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskMembershipNumber(v)}`],
+  [/(firstName["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskName(v)}`],
+  [/(lastName["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskName(v)}`],
+];
+
+/** Apply all R010 masking rules to an arbitrary text string */
+export function maskSensitive(text: string): string {
+  let result = text;
+  for (const [pattern, replacer] of SENSITIVE_PATTERNS) {
+    result = result.replace(pattern, replacer as Parameters<typeof String.prototype.replace>[1]);
+  }
+  return result;
+}
