@@ -5,6 +5,7 @@ import ProfileForm from "./components/ProfileForm";
 import EventSetup from "./components/EventSetup";
 import ApplyForm from "./components/ApplyForm";
 import ApplyExecution from "./components/ApplyExecution";
+import LogPanel from "./components/LogPanel";
 import "./styles.css";
 
 type AppStep = "login" | "profile" | "event-setup" | "apply-form" | "apply-execution";
@@ -107,6 +108,8 @@ export default function App() {
       {step === "apply-execution" && (
         <ApplyExecution onReset={handleReset} />
       )}
+
+      <LogPanel />
     </main>
   );
 }

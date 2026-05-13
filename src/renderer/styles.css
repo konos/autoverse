@@ -297,3 +297,47 @@ body {
   padding: 0.05rem 0.3rem;
   border-radius: 3px;
 }
+
+/* LogPanel */
+.log-panel {
+  margin-top: 1rem;
+}
+
+.log-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.log-panel-list {
+  max-height: 200px;
+}
+
+.log-item {
+  font-size: 0.78rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.log-error {
+  color: var(--color-error);
+  font-weight: 500;
+}
+
+.log-warn {
+  color: var(--color-warning);
+}
+
+.log-ts {
+  color: var(--color-muted);
+}
+
+.log-level {
+  font-weight: 600;
+}
+
+.log-source {
+  color: var(--color-primary);
+}
