@@ -136,8 +136,10 @@ export interface StatusResponse {
 export type ApplyEventType =
   | "form-fetched"
   | "time-synced"
+  | "armed"
   | "post-fired"
   | "poll-result"
+  | "completed"
   | "apply-error";
 
 export interface ApplyEvent {
@@ -149,6 +151,32 @@ export interface ApplyEvent {
     message: string;
     statusCode?: number;
   };
+}
+
+export type ApplyPhase =
+  | "idle"
+  | "fetching-form"
+  | "form-ready"
+  | "waiting-consent"
+  | "syncing-time"
+  | "armed"
+  | "waiting"
+  | "firing"
+  | "polling"
+  | "completed"
+  | "error";
+
+export interface ApplyEngineState {
+  phase: ApplyPhase;
+  phaseTimestamps: Partial<Record<ApplyPhase, number>>;
+  postFired: boolean;
+  hasSchema: boolean;
+  hasSyncResult: boolean;
+}
+
+export interface ApplyResult {
+  status: "COMPLETED";
+  completedAt: number;
 }
 
 // ── Time synchronization (§6) ─────────────────────────────────────────────
@@ -197,7 +225,15 @@ export interface IpcApi {
     get: () => Promise<Profile | null>;
     clear: () => Promise<void>;
   };
+  apply: {
+    fetchForm: (eventId: string) => Promise<FormSchema>;
+    arm: (rewardIds: number[], consentIds: number[]) => Promise<void>;
+    execute: () => Promise<ApplyResult>;
+    getState: () => Promise<ApplyEngineState>;
+    reset: () => Promise<void>;
+  };
   onAuthEvent: (cb: (event: AuthEvent) => void) => () => void;
+  onApplyEvent: (cb: (event: ApplyEvent) => void) => () => void;
 }
 
 declare global {

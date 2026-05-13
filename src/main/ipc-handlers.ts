@@ -1,7 +1,8 @@
 import { ipcMain, BrowserWindow } from "electron";
 import { authService } from "./services/auth-service";
 import { profileStore } from "./services/profile-store";
-import type { AuthEvent, Profile } from "../shared/types";
+import { applyEngine } from "./services/apply-engine";
+import type { AuthEvent, ApplyEvent, Profile } from "../shared/types";
 
 let mainWindowRef: BrowserWindow | null = null;
 
@@ -14,9 +15,17 @@ function forwardAuthEvent(event: AuthEvent): void {
   mainWindowRef?.webContents.send("auth:event", event);
 }
 
+/** Broadcast any ApplyEngine event to the renderer via apply:event channel */
+function forwardApplyEvent(event: ApplyEvent): void {
+  mainWindowRef?.webContents.send("apply:event", event);
+}
+
 export function registerIpcHandlers(): void {
   // Forward all auth events to renderer
   authService.on("auth-event", forwardAuthEvent);
+
+  // Forward all apply engine events to renderer
+  applyEngine.on("apply-event", forwardApplyEvent);
 
   // auth:status — current login state
   ipcMain.handle("auth:status", async () => authService.getStatus());
@@ -45,14 +54,41 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("profile:clear", async () => {
     profileStore.clearProfile();
   });
+
+  // apply:fetch-form — fetch and validate form schema
+  ipcMain.handle("apply:fetch-form", async (_evt, eventId: string) =>
+    applyEngine.fetchForm(eventId)
+  );
+
+  // apply:arm — set reward/consent selections
+  ipcMain.handle(
+    "apply:arm",
+    async (_evt, rewardIds: number[], consentIds: number[]) =>
+      applyEngine.arm(rewardIds, consentIds)
+  );
+
+  // apply:execute — run the full apply flow
+  ipcMain.handle("apply:execute", async () => applyEngine.execute());
+
+  // apply:state — query current engine state
+  ipcMain.handle("apply:state", async () => applyEngine.getState());
+
+  // apply:reset — reset engine for next event
+  ipcMain.handle("apply:reset", async () => applyEngine.reset());
 }
 
 export function unregisterIpcHandlers(): void {
   authService.off("auth-event", forwardAuthEvent);
+  applyEngine.off("apply-event", forwardApplyEvent);
   ipcMain.removeHandler("auth:status");
   ipcMain.removeHandler("auth:open-login");
   ipcMain.removeHandler("auth:validate-token");
   ipcMain.removeHandler("profile:save");
   ipcMain.removeHandler("profile:get");
   ipcMain.removeHandler("profile:clear");
+  ipcMain.removeHandler("apply:fetch-form");
+  ipcMain.removeHandler("apply:arm");
+  ipcMain.removeHandler("apply:execute");
+  ipcMain.removeHandler("apply:state");
+  ipcMain.removeHandler("apply:reset");
 }
