@@ -1,0 +1,343 @@
+/* Design tokens */
+:root {
+  --color-bg: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-border: #d1d1d6;
+  --color-text: #1d1d1f;
+  --color-muted: #86868b;
+  --color-success: #34c759;
+  --color-error: #ff3b30;
+  --color-warning: #ff9500;
+  --color-primary: #0071e3;
+  --color-primary-hover: #0077ed;
+  --color-primary-disabled: #a0c4f1;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Layout */
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.app-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+/* Card */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.card-description {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+}
+
+/* Status rows */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.status-label {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  min-width: 56px;
+}
+
+.status-value {
+  font-size: 0.85rem;
+}
+
+.status-badge {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.token-preview {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  background: var(--color-bg);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+/* Form */
+.form-field {
+  margin-bottom: 0.875rem;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-muted);
+  margin-bottom: 0.3rem;
+}
+
+.form-input {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  background: var(--color-surface);
+  transition: border-color 0.15s;
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.15);
+}
+
+.phone-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.phone-code {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.phone-number {
+  flex: 1;
+}
+
+/* Buttons */
+.button-row {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn {
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn-primary:not(:disabled):hover {
+  background: var(--color-primary-hover);
+}
+
+/* Messages */
+.error-message {
+  font-size: 0.8rem;
+  color: var(--color-error);
+  margin-top: 0.5rem;
+}
+
+.success-message {
+  font-size: 0.8rem;
+  color: var(--color-success);
+  margin-top: 0.5rem;
+}
+
+.muted {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+/* Secondary button */
+.btn-secondary {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.btn-secondary:not(:disabled):hover {
+  background: #c7c7cc;
+}
+
+/* Success button (confirmed state) */
+.btn-success {
+  background: var(--color-success);
+  color: #fff;
+  cursor: default;
+}
+
+/* Text button (inline link-like) */
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* Form section divider */
+.form-section {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+}
+
+/* Radio/checkbox options */
+.reward-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.radio-label,
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+/* Consent item */
+.consent-item {
+  margin-bottom: 0.6rem;
+}
+
+.consent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.consent-body {
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Event log */
+.log-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.log-item {
+  font-size: 0.8rem;
+}
+
+.log-type {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  background: rgba(0, 113, 227, 0.08);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}
+
+/* LogPanel */
+.log-panel {
+  margin-top: 1rem;
+}
+
+.log-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.log-panel-list {
+  max-height: 200px;
+}
+
+.log-item {
+  font-size: 0.78rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.log-error {
+  color: var(--color-error);
+  font-weight: 500;
+}
+
+.log-warn {
+  color: var(--color-warning);
+}
+
+.log-ts {
+  color: var(--color-muted);
+}
+
+.log-level {
+  font-weight: 600;
+}
+
+.log-source {
+  color: var(--color-primary);
+}
