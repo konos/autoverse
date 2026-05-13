@@ -6,6 +6,7 @@ import { profileStore } from "./profile-store";
 import { buildApplyPayload } from "../../shared/payload-builder";
 import { validateFormSchema } from "../../shared/form-parser";
 import { maskToken } from "../../shared/mask";
+import { logService } from "./log-service";
 import type {
   FormSchema,
   ApplyEngineState,
@@ -300,7 +301,7 @@ export class ApplyEngine extends EventEmitter {
   private _setPhase(phase: ApplyPhase): void {
     this.phase = phase;
     this.phaseTimestamps[phase] = Date.now();
-    console.log(`[ApplyEngine] phase=${phase}`);
+    logService.info("ApplyEngine", `phase=${phase}`);
   }
 
   private _emitEvent(event: ApplyEvent): void {
@@ -314,7 +315,7 @@ export class ApplyEngine extends EventEmitter {
     message: string,
     statusCode?: number,
   ): void {
-    console.error(`[ApplyEngine] error phase=${phase} code=${code} msg=${message}`);
+    logService.error("ApplyEngine", `error phase=${phase} code=${code} msg=${message}`);
     const event: ApplyEvent = {
       type: "apply-error",
       timestamp: Date.now(),

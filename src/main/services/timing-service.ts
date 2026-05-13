@@ -1,5 +1,6 @@
 import type { TimeSyncResult } from "../../shared/types";
 import { maskToken } from "../../shared/mask";
+import { logService } from "./log-service";
 
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
@@ -53,9 +54,7 @@ export class TimingService {
     const localMidMs = t0 + rttMs / 2;
 
     if (!dateHeader) {
-      console.warn(
-        `[TimingService] Date 헤더 없음 — offsetMs=0 폴백 token=${maskToken(token)}`,
-      );
+      logService.warn("TimingService", `Date 헤더 없음 — offsetMs=0 폴백 token=${maskToken(token)}`);
       const now = new Date(localMidMs);
       return { offsetMs: 0, rttMs, serverTime: now, localTime: now };
     }
@@ -64,9 +63,7 @@ export class TimingService {
     try {
       serverTime = this.parseServerDate(dateHeader);
     } catch {
-      console.warn(
-        `[TimingService] Date 헤더 파싱 실패 "${dateHeader}" — offsetMs=0 폴백`,
-      );
+      logService.warn("TimingService", `Date 헤더 파싱 실패 "${dateHeader}" — offsetMs=0 폴백`);
       const now = new Date(localMidMs);
       return { offsetMs: 0, rttMs, serverTime: now, localTime: now };
     }
@@ -75,8 +72,9 @@ export class TimingService {
     const offsetMs = serverNowMs - localMidMs;
     const localTime = new Date(localMidMs);
 
-    console.log(
-      `[TimingService] synced offsetMs=${offsetMs >= 0 ? "+" : ""}${Math.round(offsetMs)} rttMs=${rttMs} serverTime=${serverTime.toISOString()}`,
+    logService.info(
+      "TimingService",
+      `synced offsetMs=${offsetMs >= 0 ? "+" : ""}${Math.round(offsetMs)} rttMs=${rttMs} serverTime=${serverTime.toISOString()}`,
     );
 
     return { offsetMs, rttMs, serverTime, localTime };
@@ -94,8 +92,9 @@ export class TimingService {
     const floor = startAtMs - GUARD_MARGIN_MS;
     const fireTimeMs = Math.max(raw, floor);
 
-    console.log(
-      `[TimingService] fireTime=${fireTimeMs} (startAt - offset - rtt/2)` +
+    logService.info(
+      "TimingService",
+      `fireTime=${fireTimeMs} (startAt - offset - rtt/2)` +
         (raw < floor ? " [clamped to startAt-50ms]" : ""),
     );
 
@@ -142,8 +141,9 @@ export class TimingService {
     const threshold = startAt.getTime() - GUARD_MARGIN_MS;
     const passed = serverNow >= threshold;
 
-    console.log(
-      `[TimingService] timeGuard ${passed ? "PASSED" : "BLOCKED"} serverNow=${new Date(serverNow).toISOString()} threshold=${new Date(threshold).toISOString()}`,
+    logService.info(
+      "TimingService",
+      `timeGuard ${passed ? "PASSED" : "BLOCKED"} serverNow=${new Date(serverNow).toISOString()} threshold=${new Date(threshold).toISOString()}`,
     );
 
     return passed;

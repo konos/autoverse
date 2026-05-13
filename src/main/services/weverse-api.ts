@@ -1,4 +1,5 @@
 import { maskToken } from "@shared/mask";
+import { logService } from "./log-service";
 import type {
   FormSchema,
   ApplyPayload,
@@ -47,9 +48,7 @@ export class WeverseApi {
    */
   async fetchFormSchema(eventId: string, token: string): Promise<FormSchema> {
     const url = `${FAN_API_BASE}/api/fan-api/v1/events/${encodeURIComponent(eventId)}/application`;
-    console.log(
-      `[WeverseApi] fetchFormSchema eventId=${eventId} token=${maskToken(token)}`
-    );
+    logService.info("WeverseApi", `fetchFormSchema eventId=${eventId} token=${maskToken(token)}`);
 
     let res: Response;
     try {
@@ -62,7 +61,7 @@ export class WeverseApi {
         err instanceof Error && err.name === "AbortError"
           ? "네트워크 타임아웃"
           : `네트워크 에러: ${String(err)}`;
-      console.error(`[WeverseApi] fetchFormSchema error event=${eventId}`, msg);
+      logService.error("WeverseApi", `fetchFormSchema error event=${eventId}: ${msg}`);
       throw new WeverseApiError("NETWORK_ERROR", msg);
     }
 
@@ -80,9 +79,7 @@ export class WeverseApi {
         typeof (body as Record<string, unknown>).code === "string"
           ? String((body as Record<string, unknown>).code)
           : "APPLICATION_001";
-      console.error(
-        `[WeverseApi] fetchFormSchema 400 code=${code} event=${eventId}`
-      );
+      logService.error("WeverseApi", `fetchFormSchema 400 code=${code} event=${eventId}`);
       throw new WeverseApiError(
         code,
         code === "APPLICATION_001"
@@ -111,9 +108,7 @@ export class WeverseApi {
       throw new WeverseApiError("PARSE_ERROR", "폼 스키마 JSON 파싱 실패");
     }
 
-    console.log(
-      `[WeverseApi] fetchFormSchema ok event=${eventId} responseType=${schema.responseType} applyHost=${schema.applyHost}`
-    );
+    logService.info("WeverseApi", `fetchFormSchema ok event=${eventId} responseType=${schema.responseType} applyHost=${schema.applyHost}`);
     return schema;
   }
 
@@ -130,9 +125,7 @@ export class WeverseApi {
     payload: ApplyPayload
   ): Promise<void> {
     const url = `${applyHost}/apply-api/v1/artists/${encodeURIComponent(artistCode)}/events/${encodeURIComponent(eventId)}`;
-    console.log(
-      `[WeverseApi] submitApplication event=${eventId} artist=${artistCode} token=${maskToken(token)} applyToken=${maskToken(applyToken)}`
-    );
+    logService.info("WeverseApi", `submitApplication event=${eventId} artist=${artistCode} token=${maskToken(token)} applyToken=${maskToken(applyToken)}`);
 
     let res: Response;
     try {
@@ -154,12 +147,12 @@ export class WeverseApi {
         err instanceof Error && err.name === "AbortError"
           ? "제출 타임아웃"
           : `제출 네트워크 에러: ${String(err)}`;
-      console.error(`[WeverseApi] submitApplication error event=${eventId}`, msg);
+      logService.error("WeverseApi", `submitApplication error event=${eventId}: ${msg}`);
       throw new WeverseApiError("NETWORK_ERROR", msg);
     }
 
     if (res.status === 200) {
-      console.log(`[WeverseApi] submitApplication status=200 event=${eventId}`);
+      logService.info("WeverseApi", `submitApplication status=200 event=${eventId}`);
       return;
     }
 
@@ -173,9 +166,7 @@ export class WeverseApi {
     } catch {
       errBody = "";
     }
-    console.error(
-      `[WeverseApi] submitApplication failed status=${res.status} event=${eventId} body=${errBody.slice(0, 200)}`
-    );
+    logService.error("WeverseApi", `submitApplication failed status=${res.status} event=${eventId} body=${errBody.slice(0, 200)}`);
     throw new WeverseApiError(
       "SUBMIT_FAILED",
       `제출 실패: HTTP ${res.status}`,
@@ -224,9 +215,7 @@ export class WeverseApi {
       throw new WeverseApiError("PARSE_ERROR", "상태 응답 JSON 파싱 실패");
     }
 
-    console.log(
-      `[WeverseApi] pollStatus result=${body.status} event=${eventId}`
-    );
+    logService.info("WeverseApi", `pollStatus result=${body.status} event=${eventId}`);
     return body;
   }
 }

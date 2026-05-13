@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { Profile, AuthEvent, ApplyEvent, IpcApi } from "../shared/types";
+import type { Profile, AuthEvent, ApplyEvent, LogEntry, IpcApi } from "../shared/types";
 
 const api: IpcApi = {
   auth: {
@@ -19,6 +19,14 @@ const api: IpcApi = {
     execute: () => ipcRenderer.invoke("apply:execute"),
     getState: () => ipcRenderer.invoke("apply:state"),
     reset: () => ipcRenderer.invoke("apply:reset"),
+  },
+  log: {
+    onEntry: (cb: (entry: LogEntry) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, entry: LogEntry) => cb(entry);
+      ipcRenderer.on("log:entry", handler);
+      return () => ipcRenderer.removeListener("log:entry", handler);
+    },
+    download: () => ipcRenderer.invoke("log:download"),
   },
   onAuthEvent: (cb: (event: AuthEvent) => void) => {
     const handler = (_: Electron.IpcRendererEvent, event: AuthEvent) => cb(event);

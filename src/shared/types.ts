@@ -244,6 +244,10 @@ export interface IpcApi {
     getState: () => Promise<ApplyEngineState>;
     reset: () => Promise<void>;
   };
+  log: {
+    onEntry: (cb: (entry: LogEntry) => void) => () => void;
+    download: () => Promise<{ saved: boolean; filePath?: string }>;
+  };
   onAuthEvent: (cb: (event: AuthEvent) => void) => () => void;
   onApplyEvent: (cb: (event: ApplyEvent) => void) => () => void;
 }

@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { Profile } from "../../shared/types";
 import { maskPhone, maskBirthDate } from "../../shared/mask";
+import { logService } from "./log-service";
 
 const PROFILE_FILENAME = "profile.enc";
 
@@ -29,9 +30,7 @@ export class ProfileStore {
     const birthMasked = profile.birthDate
       ? maskBirthDate(profile.birthDate)
       : "없음";
-    console.log(
-      `[ProfileStore] saved fanId=${profile.fanId} phone=${phoneMasked} birth=${birthMasked}`
-    );
+    logService.info("ProfileStore", `saved fanId=${profile.fanId} phone=${phoneMasked} birth=${birthMasked}`);
   }
 
   getProfile(): Profile | null {
@@ -51,7 +50,7 @@ export class ProfileStore {
     try {
       buffer = fs.readFileSync(filePath);
     } catch (err) {
-      console.error("[ProfileStore] 파일 읽기 실패:", err);
+      logService.error("ProfileStore", `파일 읽기 실패: ${String(err)}`);
       throw new Error("프로필 파일 읽기 실패");
     }
 
@@ -59,7 +58,7 @@ export class ProfileStore {
     try {
       json = safeStorage.decryptString(buffer);
     } catch (err) {
-      console.error("[ProfileStore] 복호화 실패 — 프로필 삭제 후 재입력 필요:", err);
+      logService.error("ProfileStore", `복호화 실패 — 프로필 삭제 후 재입력 필요: ${String(err)}`);
       this._deleteFile(filePath);
       throw new Error("프로필 복호화 실패 — 프로필이 초기화되었습니다");
     }
@@ -68,12 +67,12 @@ export class ProfileStore {
     try {
       profile = JSON.parse(json) as Profile;
     } catch (err) {
-      console.error("[ProfileStore] JSON 파싱 실패 — 프로필 삭제:", err);
+      logService.error("ProfileStore", `JSON 파싱 실패 — 프로필 삭제: ${String(err)}`);
       this._deleteFile(filePath);
       throw new Error("프로필 데이터 파싱 실패 — 프로필이 초기화되었습니다");
     }
 
-    console.log(`[ProfileStore] loaded fanId=${profile.fanId}`);
+    logService.info("ProfileStore", `loaded fanId=${profile.fanId}`);
     return profile;
   }
 
@@ -81,7 +80,7 @@ export class ProfileStore {
     const filePath = getProfilePath();
     if (fs.existsSync(filePath)) {
       this._deleteFile(filePath);
-      console.log("[ProfileStore] profile cleared");
+      logService.info("ProfileStore", "profile cleared");
     }
   }
 
@@ -89,7 +88,7 @@ export class ProfileStore {
     try {
       fs.unlinkSync(filePath);
     } catch (err) {
-      console.error("[ProfileStore] 파일 삭제 실패:", err);
+      logService.error("ProfileStore", `파일 삭제 실패: ${String(err)}`);
     }
   }
 }

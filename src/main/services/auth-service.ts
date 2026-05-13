@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { BrowserWindow } from "electron";
 import { maskToken } from "../../shared/mask";
 import type { AuthStatus, AuthEvent } from "../../shared/types";
+import { logService } from "./log-service";
 
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
@@ -118,15 +119,13 @@ export class AuthService extends EventEmitter {
       try {
         cookies = await win.webContents.session.cookies.get(q);
       } catch (err) {
-        console.error(`[AuthService] cookies.get failed for domain ${q.domain}:`, err);
+        logService.error("AuthService", `cookies.get failed for domain ${q.domain}: ${String(err)}`);
         continue;
       }
 
       if (cookies.length > 0 && cookies[0].value) {
         this.cachedToken = cookies[0].value;
-        console.log(
-          `[AuthService] login-success token=${maskToken(this.cachedToken)}`
-        );
+        logService.info("AuthService", `login-success token=${maskToken(this.cachedToken)}`);
         this._emit({
           type: "login-success",
           message: `토큰 추출 성공: ${maskToken(this.cachedToken)}`,
@@ -224,7 +223,7 @@ export class AuthService extends EventEmitter {
       return { isLoggedIn: false };
     }
 
-    console.log(`[AuthService] token-validated fanId=${body.fanId}`);
+    logService.info("AuthService", `token-validated fanId=${body.fanId}`);
     this._emit({
       type: "token-validated",
       message: `fanId=${body.fanId} 검증 성공`,
