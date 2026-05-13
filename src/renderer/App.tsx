@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
-import type { AuthStatus, AuthEvent } from "../shared/types";
+import type { AuthStatus, AuthEvent, FormSchema } from "../shared/types";
 import LoginPanel from "./components/LoginPanel";
 import ProfileForm from "./components/ProfileForm";
+import EventSetup from "./components/EventSetup";
+import ApplyForm from "./components/ApplyForm";
+import ApplyExecution from "./components/ApplyExecution";
 import "./styles.css";
 
-type AppStep = "login" | "profile";
+type AppStep = "login" | "profile" | "event-setup" | "apply-form" | "apply-execution";
 
 export default function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>({ isLoggedIn: false });
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [step, setStep] = useState<AppStep>("login");
+  const [formSchema, setFormSchema] = useState<FormSchema | null>(null);
 
   useEffect(() => {
     window.api.auth.getStatus().then((s) => {
@@ -56,7 +60,21 @@ export default function App() {
   };
 
   const handleProfileSaved = () => {
-    // profile saved — no step change needed (still in profile step)
+    setStep("event-setup");
+  };
+
+  const handleFormFetched = (schema: FormSchema) => {
+    setFormSchema(schema);
+    setStep("apply-form");
+  };
+
+  const handleArmed = () => {
+    setStep("apply-execution");
+  };
+
+  const handleReset = () => {
+    setFormSchema(null);
+    setStep("event-setup");
   };
 
   return (
@@ -72,6 +90,22 @@ export default function App() {
 
       {step === "profile" && authStatus.isLoggedIn && authStatus.fanId !== undefined && (
         <ProfileForm fanId={authStatus.fanId} onSaved={handleProfileSaved} />
+      )}
+
+      {step === "event-setup" && authStatus.isLoggedIn && (
+        <EventSetup onFormFetched={handleFormFetched} />
+      )}
+
+      {step === "apply-form" && formSchema !== null && authStatus.fanId !== undefined && (
+        <ApplyForm
+          schema={formSchema}
+          fanId={authStatus.fanId}
+          onArmed={handleArmed}
+        />
+      )}
+
+      {step === "apply-execution" && (
+        <ApplyExecution onReset={handleReset} />
       )}
     </main>
   );

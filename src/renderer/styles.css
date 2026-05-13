@@ -192,3 +192,108 @@ body {
   color: var(--color-muted);
   font-size: 0.85rem;
 }
+
+/* Secondary button */
+.btn-secondary {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.btn-secondary:not(:disabled):hover {
+  background: #c7c7cc;
+}
+
+/* Success button (confirmed state) */
+.btn-success {
+  background: var(--color-success);
+  color: #fff;
+  cursor: default;
+}
+
+/* Text button (inline link-like) */
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* Form section divider */
+.form-section {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+}
+
+/* Radio/checkbox options */
+.reward-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.radio-label,
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+/* Consent item */
+.consent-item {
+  margin-bottom: 0.6rem;
+}
+
+.consent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.consent-body {
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* Event log */
+.log-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.log-item {
+  font-size: 0.8rem;
+}
+
+.log-type {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  background: rgba(0, 113, 227, 0.08);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}
