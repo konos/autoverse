@@ -108,7 +108,10 @@ export class WeverseApi {
       throw new WeverseApiError("PARSE_ERROR", "폼 스키마 JSON 파싱 실패");
     }
 
-    logService.info("WeverseApi", `fetchFormSchema ok event=${eventId} responseType=${schema.responseType} applyHost=${schema.applyHost}`);
+    logService.info("WeverseApi", `fetchFormSchema ok event=${eventId} responseType=${schema.responseType} applyHost=${schema.applyHost} applyType=${schema.applyType}`);
+    if (schema.applyPeriod) {
+      logService.info("WeverseApi", `fetchFormSchema period formOpenAt=${schema.applyPeriod.formOpenAt} startAt=${schema.applyPeriod.startAt} endAt=${schema.applyPeriod.endAt}`);
+    }
     return schema;
   }
 

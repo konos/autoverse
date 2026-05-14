@@ -267,10 +267,26 @@ export class ApplyEngine extends EventEmitter {
     const result = await this._pollStatus(schema, token);
 
     this._setPhase("completed");
+
+    const executeStartMs = this.phaseTimestamps["syncing-time"] ?? Date.now();
+    const totalElapsedMs = Date.now() - executeStartMs;
+    const postFiredAt = this.phaseTimestamps["firing"];
+    const completedAt = result.completedAt;
+
+    logService.info("ApplyEngine", `RESULT status=${result.status} completedAt=${new Date(completedAt).toISOString()} totalElapsedMs=${totalElapsedMs}`);
+    if (postFiredAt) {
+      logService.info("ApplyEngine", `TIMING postFiredAt=${new Date(postFiredAt).toISOString()} postToCompleteMs=${completedAt - postFiredAt}`);
+    }
+
     this._emitEvent({
       type: "completed",
       timestamp: Date.now(),
-      data: { status: result.status },
+      data: {
+        status: result.status,
+        completedAt: new Date(completedAt).toISOString(),
+        totalElapsedMs,
+        postToCompleteMs: postFiredAt ? completedAt - postFiredAt : undefined,
+      },
     });
 
     return result;

@@ -130,10 +130,23 @@ export default function ApplyExecution({ onReset }: ApplyExecutionProps) {
 
       {/* 결과 */}
       {phase === "completed" && result && (
-        <p className="success-message" role="status" style={{ marginTop: "0.75rem" }}>
-          신청이 완료되었습니다. (완료 시각:{" "}
-          {new Date(result.completedAt).toLocaleTimeString("ko-KR")})
-        </p>
+        <div className="success-message" role="status" style={{ marginTop: "0.75rem" }}>
+          <p>신청이 완료되었습니다.</p>
+          <p style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
+            완료 시각: {new Date(result.completedAt).toLocaleTimeString("ko-KR", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 } as Intl.DateTimeFormatOptions)}
+          </p>
+          {(() => {
+            const completedEvent = events.find(e => e.type === "completed");
+            if (!completedEvent?.data) return null;
+            const { totalElapsedMs, postToCompleteMs } = completedEvent.data as { totalElapsedMs?: number; postToCompleteMs?: number };
+            return (
+              <p className="muted" style={{ fontSize: "0.78rem", marginTop: "0.25rem" }}>
+                {totalElapsedMs != null && `전체 소요: ${totalElapsedMs}ms`}
+                {postToCompleteMs != null && ` | POST→완료: ${postToCompleteMs}ms`}
+              </p>
+            );
+          })()}
+        </div>
       )}
 
       {/* 오류 */}

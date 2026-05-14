@@ -21,8 +21,13 @@ export default function EventSetup({ onFormFetched }: EventSetupProps) {
 
   const extractEventId = (input: string): string => {
     const trimmed = input.trim();
-    const match = trimmed.match(/\/events\/([^/]+)/);
-    return match ? match[1] : trimmed;
+    // /events/{id} 패턴 (fanevent-v2 직접 URL)
+    const eventsMatch = trimmed.match(/\/events\/([^/]+)/);
+    if (eventsMatch) return eventsMatch[1];
+    // weverse.io/*/notice/{id} 패턴 (공지 URL → eventId = notice 번호)
+    const noticeMatch = trimmed.match(/weverse\.io\/[^/]+\/notice\/(\d+)/);
+    if (noticeMatch) return noticeMatch[1];
+    return trimmed;
   };
 
   const handleFetch = async () => {
