@@ -1,10 +1,10 @@
-import { maskToken } from "@shared/mask";
+import { maskToken } from "../../shared/mask";
 import { logService } from "./log-service";
 import type {
   FormSchema,
   ApplyPayload,
   StatusResponse,
-} from "@shared/types";
+} from "../../shared/types";
 
 const FAN_API_BASE = "https://fanevent-v2.weverse.io";
 const FETCH_TIMEOUT_MS = 5_000;

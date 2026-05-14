@@ -24,10 +24,16 @@ export default function App() {
     });
 
     const unsubscribe = window.api.onAuthEvent((event: AuthEvent) => {
-      if (event.type === "login-success" || event.type === "token-validated") {
+      if (event.type === "login-success") {
+        setLoginError(null);
         window.api.auth.getStatus().then((s) => {
           setAuthStatus(s);
-          setStep("profile");
+          if (s.fanId !== undefined) setStep("profile");
+        });
+      } else if (event.type === "token-validated") {
+        window.api.auth.getStatus().then((s) => {
+          setAuthStatus(s);
+          if (s.fanId !== undefined) setStep("profile");
           setLoginError(null);
         });
       } else if (event.type === "login-failed") {

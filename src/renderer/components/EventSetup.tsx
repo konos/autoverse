@@ -19,10 +19,16 @@ export default function EventSetup({ onFormFetched }: EventSetupProps) {
   const [error, setError] = useState<string | null>(null);
   const [fetched, setFetched] = useState<FormSchema | null>(null);
 
+  const extractEventId = (input: string): string => {
+    const trimmed = input.trim();
+    const match = trimmed.match(/\/events\/([^/]+)/);
+    return match ? match[1] : trimmed;
+  };
+
   const handleFetch = async () => {
-    const id = eventId.trim();
+    const id = extractEventId(eventId);
     if (!id) {
-      setError("이벤트 ID를 입력해주세요.");
+      setError("이벤트 URL 또는 ID를 입력해주세요.");
       return;
     }
     setLoading(true);
@@ -45,17 +51,17 @@ export default function EventSetup({ onFormFetched }: EventSetupProps) {
       <h2 id="event-setup-heading" className="card-title">
         이벤트 설정
       </h2>
-      <p className="card-description">응모할 팬 이벤트 ID를 입력하세요.</p>
+      <p className="card-description">응모할 팬 이벤트 URL 또는 ID를 입력하세요.</p>
 
       <div className="form-field">
         <label htmlFor="eventId" className="form-label">
-          이벤트 ID
+          이벤트 URL 또는 ID
         </label>
         <input
           id="eventId"
           type="text"
           className="form-input"
-          placeholder="예: abc123"
+          placeholder="예: https://fanevent-v2.weverse.io/events/abc123/apply/form 또는 abc123"
           value={eventId}
           onChange={(e) => {
             setEventId(e.target.value);
