@@ -62,6 +62,13 @@ export class AuthService extends EventEmitter {
     const win = this.loginWindow;
     let tokenExtracted = false;
 
+    // Clear stale we2_access_token cookies before polling so the user
+    // actually goes through the login flow instead of re-extracting an
+    // already-expired token from the persistent partition.
+    const session = win.webContents.session;
+    await session.cookies.remove("https://weverse.io", "we2_access_token").catch(() => {});
+    await session.cookies.remove("https://.weverse.io", "we2_access_token").catch(() => {});
+
     const pollForToken = async () => {
       if (tokenExtracted || win.isDestroyed()) return;
 
@@ -151,10 +158,17 @@ export class AuthService extends EventEmitter {
       return { isLoggedIn: false };
     }
 
-    // Log JWT exp for diagnostics but don't block — let the server decide
     const localExpired = this.isTokenExpired(this.cachedToken);
     if (localExpired) {
-      logService.warn("AuthService", "JWT exp is in the past — will try /fans/me anyway (server may accept)");
+      logService.warn("AuthService", "JWT exp is in the past — skipping server call, token is expired");
+      this._emit({
+        type: "token-expired",
+        message: "JWT 만료 — 다시 로그인해주세요",
+        timestamp: Date.now(),
+      });
+      this.cachedToken = null;
+      this.cachedFanId = undefined;
+      return { isLoggedIn: false };
     }
 
     const controller = new AbortController();
