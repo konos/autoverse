@@ -132,6 +132,7 @@ export interface ApplyPayload {
 
 export type ApplyStatus =
   | "REQUESTED"
+  | "PROCESSING"
   | "COMPLETED"
   | "FAILED"
   | "REJECTED"
@@ -149,7 +150,7 @@ export type ApplyEventType =
   | "form-fetched"
   | "time-synced"
   | "armed"
-  | "post-fired"
+  | "post-submitted"
   | "poll-result"
   | "completed"
   | "apply-error";
@@ -181,14 +182,37 @@ export type ApplyPhase =
 export interface ApplyEngineState {
   phase: ApplyPhase;
   phaseTimestamps: Partial<Record<ApplyPhase, number>>;
-  postFired: boolean;
+  postSubmitted: boolean;
   hasSchema: boolean;
   hasSyncResult: boolean;
 }
 
 export interface ApplyResult {
-  status: "COMPLETED";
+  status: "COMPLETED" | "PROCESSING";
   completedAt: number;
+}
+
+// ── 나의 신청 내역 확인 (GET /fan/me/applications) ────────────────────────
+
+export interface MyApplicationEntry {
+  eventPublicId: string;
+  artistCode: string;
+  artistName: string;
+  status: string; // "APPLIED" | "LOST" | "WON" | ...
+  winningInfo: unknown | null;
+  eventTitle: Record<string, string>;
+  eventPrimaryLanguage: string;
+  isExpired: boolean;
+}
+
+export interface MyApplicationsResponse {
+  contents: MyApplicationEntry[];
+}
+
+export interface VerifyResult {
+  verified: boolean;
+  status?: string;
+  eventTitle?: string;
 }
 
 // ── Time synchronization (§6) ─────────────────────────────────────────────
@@ -240,9 +264,10 @@ export interface IpcApi {
   apply: {
     fetchForm: (eventId: string) => Promise<FormSchema>;
     arm: (rewardIds: number[], consentIds: number[]) => Promise<void>;
-    execute: () => Promise<ApplyResult>;
+    execute: (earlyMs?: number) => Promise<ApplyResult>;
     getState: () => Promise<ApplyEngineState>;
     reset: () => Promise<void>;
+    verify: (eventId: string) => Promise<VerifyResult>;
   };
   log: {
     onEntry: (cb: (entry: LogEntry) => void) => () => void;

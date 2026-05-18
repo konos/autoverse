@@ -55,35 +55,43 @@ describe("TimingService.parseServerDate", () => {
   });
 });
 
-// ── calculateFireTime ─────────────────────────────────────────────────────────
+// ── calculateSubmitTime ──────────────────────────────────────────────────────
 
-describe("TimingService.calculateFireTime", () => {
+describe("TimingService.calculateSubmitTime", () => {
   const svc = new TimingService();
   const startAt = new Date("2026-05-12T12:00:00.000Z");
   const startAtMs = startAt.getTime();
 
-  it("subtracts offset and rtt/2 from startAt", () => {
+  it("subtracts offset from startAt (no rtt/2)", () => {
     const sync = {
       offsetMs: 10,
       rttMs: 20,
       serverTime: startAt,
       localTime: startAt,
     };
-    // raw = startAtMs - 10 - 10 = startAtMs - 20
-    // floor = startAtMs - 50
-    // startAtMs - 20 > startAtMs - 50 → no clamp
-    expect(svc.calculateFireTime(startAt, sync)).toBe(startAtMs - 20);
+    // raw = startAtMs - 10 - 0 (earlyMs default) = startAtMs - 10
+    expect(svc.calculateSubmitTime(startAt, sync)).toBe(startAtMs - 10);
   });
 
-  it("clamps to startAt - 50ms when calculated fire time is too early", () => {
-    // offset large → raw fire time << startAt - 50ms
+  it("subtracts earlyMs when provided", () => {
+    const sync = {
+      offsetMs: 10,
+      rttMs: 20,
+      serverTime: startAt,
+      localTime: startAt,
+    };
+    // raw = startAtMs - 10 - 25 = startAtMs - 35
+    expect(svc.calculateSubmitTime(startAt, sync, 25)).toBe(startAtMs - 35);
+  });
+
+  it("clamps to startAt - 50ms when calculated submit time is too early", () => {
     const sync = {
       offsetMs: 5_000,
       rttMs: 0,
       serverTime: startAt,
       localTime: startAt,
     };
-    expect(svc.calculateFireTime(startAt, sync)).toBe(startAtMs - 50);
+    expect(svc.calculateSubmitTime(startAt, sync)).toBe(startAtMs - 50);
   });
 
   it("handles offsetMs=0 (no adjustment needed)", () => {
@@ -93,9 +101,8 @@ describe("TimingService.calculateFireTime", () => {
       serverTime: startAt,
       localTime: startAt,
     };
-    // raw = startAtMs - 0 - 0 = startAtMs, but clamp floor = startAtMs - 50
-    // startAtMs >= startAtMs - 50, so raw wins
-    expect(svc.calculateFireTime(startAt, sync)).toBe(startAtMs);
+    // raw = startAtMs - 0 - 0 = startAtMs
+    expect(svc.calculateSubmitTime(startAt, sync)).toBe(startAtMs);
   });
 
   it("handles negative offset (server behind local)", () => {
@@ -105,8 +112,8 @@ describe("TimingService.calculateFireTime", () => {
       serverTime: startAt,
       localTime: startAt,
     };
-    // raw = startAtMs - (-200) - 50 = startAtMs + 150
-    expect(svc.calculateFireTime(startAt, sync)).toBe(startAtMs + 150);
+    // raw = startAtMs - (-200) - 0 = startAtMs + 200
+    expect(svc.calculateSubmitTime(startAt, sync)).toBe(startAtMs + 200);
   });
 
   it("handles rttMs=0 (instantaneous response)", () => {
@@ -117,8 +124,7 @@ describe("TimingService.calculateFireTime", () => {
       localTime: startAt,
     };
     // raw = startAtMs - 10 - 0 = startAtMs - 10
-    // startAtMs - 10 > startAtMs - 50 → no clamp
-    expect(svc.calculateFireTime(startAt, sync)).toBe(startAtMs - 10);
+    expect(svc.calculateSubmitTime(startAt, sync)).toBe(startAtMs - 10);
   });
 });
 
@@ -275,35 +281,35 @@ describe("TimingService.isTimeGuardPassed", () => {
   });
 });
 
-// ── waitUntilFireTime ─────────────────────────────────────────────────────────
+// ── waitUntilSubmitTime ──────────────────────────────────────────────────────
 
-describe("TimingService.waitUntilFireTime", () => {
-  it("resolves immediately for a past fireTime", async () => {
+describe("TimingService.waitUntilSubmitTime", () => {
+  it("resolves immediately for a past submitTime", async () => {
     const svc = new TimingService();
     const past = Date.now() - 100;
     const start = Date.now();
-    await svc.waitUntilFireTime(past);
+    await svc.waitUntilSubmitTime(past);
     // Should return quickly (< 100ms)
     expect(Date.now() - start).toBeLessThan(100);
   });
 
-  it("waits approximately for a near-future fireTime (≤50ms)", async () => {
+  it("waits approximately for a near-future submitTime (≤50ms)", async () => {
     const svc = new TimingService();
     const delay = 20;
-    const fireTime = Date.now() + delay;
+    const submitTime = Date.now() + delay;
     const start = Date.now();
-    await svc.waitUntilFireTime(fireTime);
+    await svc.waitUntilSubmitTime(submitTime);
     const elapsed = Date.now() - start;
     expect(elapsed).toBeGreaterThanOrEqual(delay - 5);
     expect(elapsed).toBeLessThan(delay + 100);
   });
 
-  it("waits for a slightly longer fireTime (>50ms)", async () => {
+  it("waits for a slightly longer submitTime (>50ms)", async () => {
     const svc = new TimingService();
     const delay = 80;
-    const fireTime = Date.now() + delay;
+    const submitTime = Date.now() + delay;
     const start = Date.now();
-    await svc.waitUntilFireTime(fireTime);
+    await svc.waitUntilSubmitTime(submitTime);
     const elapsed = Date.now() - start;
     expect(elapsed).toBeGreaterThanOrEqual(delay - 10);
     expect(elapsed).toBeLessThan(delay + 150);

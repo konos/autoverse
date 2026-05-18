@@ -5,17 +5,17 @@ import { logService } from "./log-service";
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
 const SYNC_TIMEOUT_MS = 5_000;
-// Fire no earlier than this margin before startAt (server-corrected)
+// Submit no earlier than this margin before startAt (server-corrected)
 const GUARD_MARGIN_MS = 50;
 
 /**
  * TimingService — §6 서버 시간 동기화 전략.
  *
  * syncTime()           GET /fans/me의 Date 헤더 + RTT/2로 오프셋 계산
- * calculateFireTime()  POST 발사 시각 = startAt - offsetMs - rttMs/2
- * waitUntilFireTime()  정밀 대기 (setTimeout + busy-wait 혼합)
+ * calculateSubmitTime()  POST 제출 시각 = startAt - offsetMs - earlyMs
+ * waitUntilSubmitTime()  정밀 대기 (setTimeout + busy-wait 혼합)
  * parseServerDate()    RFC 7231 Date 헤더 파싱
- * isTimeGuardPassed()  서버 보정 시간이 startAt - 50ms 이후인지 확인
+ * isTimeGuardPassed()   서버 보정 시간이 startAt - 50ms 이후인지 확인
  */
 export class TimingService {
   private readonly fetch: typeof globalThis.fetch;
@@ -81,33 +81,34 @@ export class TimingService {
   }
 
   /**
-   * startAt 시각에 POST가 서버에 도달하도록 로컬 발사 시각(ms epoch)을 계산한다.
-   * 결과가 startAt - 50ms 이전이면 startAt - 50ms로 클램프.
+   * 로컬 제출 시각(ms epoch)을 계산한다.
+   * 기본: 서버 startAt 정시에 POST 제출 (네트워크 전파가 자연 버퍼).
+   * earlyMs > 0 이면 그만큼 일찍 제출 (사용자 설정).
    */
-  calculateFireTime(startAt: Date, syncResult: TimeSyncResult): number {
+  calculateSubmitTime(startAt: Date, syncResult: TimeSyncResult, earlyMs = 0): number {
     const startAtMs = startAt.getTime();
-    const { offsetMs, rttMs } = syncResult;
+    const { offsetMs } = syncResult;
 
-    const raw = startAtMs - offsetMs - rttMs / 2;
+    const raw = startAtMs - offsetMs - earlyMs;
     const floor = startAtMs - GUARD_MARGIN_MS;
-    const fireTimeMs = Math.max(raw, floor);
+    const submitTimeMs = Math.max(raw, floor);
 
     logService.info(
       "TimingService",
-      `fireTime=${fireTimeMs} (startAt - offset - rtt/2)` +
+      `submitTime=${submitTimeMs} (startAt - offset${earlyMs > 0 ? ` - earlyMs=${earlyMs}` : ""})` +
         (raw < floor ? " [clamped to startAt-50ms]" : ""),
     );
 
-    return fireTimeMs;
+    return submitTimeMs;
   }
 
   /**
-   * fireTimeMs 까지 정밀 대기한다.
+   * submitTimeMs 까지 정밀 대기한다.
    *  - 잔여 > 50ms → setTimeout으로 블로킹
    *  - 잔여 ≤ 50ms → busy-wait(while + Date.now())으로 정밀 대기
    */
-  async waitUntilFireTime(fireTimeMs: number): Promise<void> {
-    const remaining = () => fireTimeMs - Date.now();
+  async waitUntilSubmitTime(submitTimeMs: number): Promise<void> {
+    const remaining = () => submitTimeMs - Date.now();
 
     const coarseMs = remaining() - 50;
     if (coarseMs > 0) {
@@ -115,7 +116,7 @@ export class TimingService {
     }
 
     // Busy-wait for the last ≤ 50ms
-    while (Date.now() < fireTimeMs) {
+    while (Date.now() < submitTimeMs) {
       /* spin */
     }
   }

@@ -105,7 +105,7 @@ function makeSyncResult(offsetMs = 0, rttMs = 20): TimeSyncResult {
 function makeApi(overrides: Record<string, unknown> = {}) {
   return {
     fetchFormSchema: vi.fn(async () => makeSchema()),
-    submitApplication: vi.fn(async () => undefined),
+    submitApplication: vi.fn(async () => ({ serverDate: "Wed, 14 May 2026 11:30:00 GMT" })),
     pollStatus: vi.fn(async () => ({ status: "COMPLETED" })),
     ...overrides,
   };
@@ -115,8 +115,8 @@ function makeTiming(overrides: Record<string, unknown> = {}) {
   const syncResult = makeSyncResult();
   return {
     syncTime: vi.fn(async () => syncResult),
-    calculateFireTime: vi.fn(() => Date.now() - 1), // already in the past → fire immediately
-    waitUntilFireTime: vi.fn(async () => undefined),
+    calculateSubmitTime: vi.fn(() => Date.now() - 1), // already in the past → submit immediately
+    waitUntilSubmitTime: vi.fn(async () => undefined),
     isTimeGuardPassed: vi.fn(() => true),
     ...overrides,
   };
@@ -212,10 +212,10 @@ describe("ApplyEngine — arm()", () => {
 });
 
 describe("ApplyEngine — execute() 안전 가드", () => {
-  it("POST 1회만 발사 — 두 번째 execute()는 POST_ALREADY_FIRED", async () => {
+  it("POST 1회만 제출 — 두 번째 execute()는 POST_ALREADY_SUBMITTED", async () => {
     let callCount = 0;
     const api = makeApi({
-      submitApplication: vi.fn(async () => { callCount++; }),
+      submitApplication: vi.fn(async () => { callCount++; return { serverDate: null }; }),
       pollStatus: vi.fn(async () => ({ status: "COMPLETED" })),
     });
     const timing = makeTiming();
@@ -228,7 +228,7 @@ describe("ApplyEngine — execute() 안전 가드", () => {
     expect(callCount).toBe(1);
 
     // Manually set phase back to armed to try again
-    // (real guard is the postFired flag, not phase)
+    // (real guard is the postSubmitted flag, not phase)
     (engine as unknown as { phase: string }).phase = "armed";
 
     await expect(engine.execute()).rejects.toThrow("POST 중복 차단");
@@ -305,14 +305,33 @@ describe("ApplyEngine — 폴링", () => {
     expect(result.status).toBe("COMPLETED");
     expect(callCount).toBe(3);
   });
+
+  it("REQUESTED → PROCESSING 전환 — PROCESSING은 성공 완료로 처리", async () => {
+    let callCount = 0;
+    const api = makeApi({
+      pollStatus: vi.fn(async () => {
+        callCount++;
+        if (callCount <= 2) return { status: "REQUESTED" };
+        return { status: "PROCESSING" };
+      }),
+    });
+    const engine = new ApplyEngine(api as never, makeTiming() as never);
+
+    await engine.fetchForm("EVENT001");
+    engine.arm([100], [1, 2]);
+    const result = await engine.execute();
+
+    expect(result.status).toBe("PROCESSING");
+    expect(callCount).toBe(3);
+  });
 });
 
 describe("ApplyEngine — getState / reset", () => {
-  it("초기 상태는 idle, postFired=false", () => {
+  it("초기 상태는 idle, postSubmitted=false", () => {
     const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
     const state = engine.getState();
     expect(state.phase).toBe("idle");
-    expect(state.postFired).toBe(false);
+    expect(state.postSubmitted).toBe(false);
     expect(state.hasSchema).toBe(false);
   });
 
@@ -326,7 +345,7 @@ describe("ApplyEngine — getState / reset", () => {
 
     const state = engine.getState();
     expect(state.phase).toBe("idle");
-    expect(state.postFired).toBe(false);
+    expect(state.postSubmitted).toBe(false);
     expect(state.hasSchema).toBe(false);
   });
 });
@@ -345,7 +364,7 @@ describe("ApplyEngine — 이벤트 emit", () => {
     expect(emitted).toContain("form-fetched");
     expect(emitted).toContain("armed");
     expect(emitted).toContain("time-synced");
-    expect(emitted).toContain("post-fired");
+    expect(emitted).toContain("post-submitted");
     expect(emitted).toContain("poll-result");
     expect(emitted).toContain("completed");
   });

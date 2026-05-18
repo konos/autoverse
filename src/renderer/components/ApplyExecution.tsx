@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
-import type { ApplyEvent, ApplyPhase, ApplyResult } from "../../shared/types";
+import { useEffect, useState, useRef } from "react";
+import type { ApplyEvent, ApplyPhase, ApplyResult, ApplyPeriod, VerifyResult } from "../../shared/types";
 
 interface ApplyExecutionProps {
   onReset: () => void;
+  applyPeriod: ApplyPeriod;
+  eventId: string;
 }
 
 const PHASE_LABELS: Record<ApplyPhase, string> = {
@@ -11,9 +13,9 @@ const PHASE_LABELS: Record<ApplyPhase, string> = {
   "form-ready": "폼 준비 완료",
   "waiting-consent": "약관 동의 대기",
   "syncing-time": "시간 동기화 중",
-  armed: "발사 준비 완료",
+  armed: "제출 준비 완료",
   waiting: "신청 시작 대기 중",
-  firing: "POST 발사 중",
+  firing: "POST 제출 중",
   polling: "결과 폴링 중",
   completed: "신청 완료",
   error: "오류 발생",
@@ -38,7 +40,7 @@ function phaseFromEvent(event: ApplyEvent): ApplyPhase | null {
     case "form-fetched": return "form-ready";
     case "time-synced": return "syncing-time";
     case "armed": return "armed";
-    case "post-fired": return "firing";
+    case "post-submitted": return "firing";
     case "poll-result": return "polling";
     case "completed": return "completed";
     case "apply-error": return "error";
@@ -46,18 +48,55 @@ function phaseFromEvent(event: ApplyEvent): ApplyPhase | null {
   }
 }
 
-export default function ApplyExecution({ onReset }: ApplyExecutionProps) {
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return "00:00:00";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function formatKST(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
+  } catch {
+    return iso;
+  }
+}
+
+export default function ApplyExecution({ onReset, applyPeriod, eventId }: ApplyExecutionProps) {
   const [phase, setPhase] = useState<ApplyPhase>("armed");
   const [events, setEvents] = useState<ApplyEvent[]>([]);
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [earlyMs, setEarlyMs] = useState(0);
+  const [recommendedEarlyMs, setRecommendedEarlyMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    timerRef.current = setInterval(() => setNow(Date.now()), 200);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  const startAtMs = new Date(applyPeriod.startAt).getTime();
+  const endAtMs = new Date(applyPeriod.endAt).getTime();
+  const msUntilStart = startAtMs - now;
+  const msUntilEnd = endAtMs - now;
 
   useEffect(() => {
     const unsubscribe = window.api.onApplyEvent((event: ApplyEvent) => {
       setEvents((prev) => [...prev, event]);
       const newPhase = phaseFromEvent(event);
       if (newPhase) setPhase(newPhase);
+      if (event.type === "time-synced" && event.data) {
+        const rec = (event.data as { recommendedEarlyMs?: number }).recommendedEarlyMs;
+        if (rec != null) setRecommendedEarlyMs(rec);
+      }
       if (event.type === "apply-error" && event.error) {
         setError(`${event.error.code}: ${event.error.message}`);
       }
@@ -70,7 +109,7 @@ export default function ApplyExecution({ onReset }: ApplyExecutionProps) {
     setError(null);
     setPhase("waiting");
     try {
-      const res = await window.api.apply.execute();
+      const res = await window.api.apply.execute(earlyMs);
       setResult(res);
       setPhase("completed");
     } catch (err) {
@@ -78,6 +117,18 @@ export default function ApplyExecution({ onReset }: ApplyExecutionProps) {
       setPhase("error");
     } finally {
       setExecuting(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    try {
+      const res = await window.api.apply.verify(eventId);
+      setVerifyResult(res);
+    } catch {
+      setVerifyResult({ verified: false });
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -108,6 +159,87 @@ export default function ApplyExecution({ onReset }: ApplyExecutionProps) {
           {PHASE_LABELS[phase]}
         </span>
       </div>
+
+      {/* 신청 기간 + 카운트다운 */}
+      <div className="countdown-panel" style={{ marginTop: "0.75rem", padding: "0.75rem", background: "var(--color-bg)", borderRadius: "8px", border: "1px solid var(--color-border)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+          <span style={{ fontSize: "0.78rem", color: "var(--color-muted)" }}>현재 시각 (KST)</span>
+          <span style={{ fontSize: "0.85rem", fontFamily: "'SF Mono', 'Fira Code', monospace", fontWeight: 600 }}>
+            {new Date(now).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+          </span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+          <span style={{ fontSize: "0.78rem", color: "var(--color-muted)" }}>신청 시작</span>
+          <span style={{ fontSize: "0.8rem" }}>{formatKST(applyPeriod.startAt)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+          <span style={{ fontSize: "0.78rem", color: "var(--color-muted)" }}>신청 종료</span>
+          <span style={{ fontSize: "0.8rem" }}>{formatKST(applyPeriod.endAt)}</span>
+        </div>
+        <div style={{ textAlign: "center", padding: "0.5rem 0", borderTop: "1px solid var(--color-border)" }}>
+          {msUntilStart > 0 ? (
+            <>
+              <div style={{ fontSize: "0.72rem", color: "var(--color-muted)", marginBottom: "0.2rem" }}>신청 시작까지</div>
+              <div style={{ fontSize: "1.6rem", fontWeight: 700, fontFamily: "'SF Mono', 'Fira Code', monospace", color: "var(--color-primary)", letterSpacing: "0.05em" }}>
+                {formatCountdown(msUntilStart)}
+              </div>
+            </>
+          ) : msUntilEnd > 0 ? (
+            <>
+              <div style={{ fontSize: "0.72rem", color: "var(--color-success)", marginBottom: "0.2rem", fontWeight: 600 }}>신청 진행 중</div>
+              <div style={{ fontSize: "1.6rem", fontWeight: 700, fontFamily: "'SF Mono', 'Fira Code', monospace", color: "var(--color-success)", letterSpacing: "0.05em" }}>
+                {formatCountdown(msUntilEnd)}
+              </div>
+              <div style={{ fontSize: "0.68rem", color: "var(--color-muted)" }}>남은 시간</div>
+            </>
+          ) : (
+            <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--color-error)" }}>신청 기간 종료</div>
+          )}
+        </div>
+      </div>
+
+      {/* 선제출 설정 */}
+      {!isTerminal && (
+        <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "var(--color-bg)", borderRadius: "8px", border: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+            <label htmlFor="earlyMs" style={{ fontSize: "0.82rem", fontWeight: 600, whiteSpace: "nowrap" }}>
+              선제출 (ms)
+            </label>
+            <input
+              id="earlyMs"
+              type="number"
+              min={0}
+              max={500}
+              step={1}
+              value={earlyMs}
+              onChange={(e) => setEarlyMs(Math.max(0, Math.min(500, Number(e.target.value) || 0)))}
+              disabled={executing}
+              style={{ width: "80px", padding: "0.3rem 0.5rem", borderRadius: "4px", border: "1px solid var(--color-border)", fontSize: "0.85rem", fontFamily: "'SF Mono', 'Fira Code', monospace", textAlign: "right" }}
+            />
+            <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+              {earlyMs === 0 ? "정시 제출" : `서버 시작 ${earlyMs}ms 전 제출`}
+            </span>
+          </div>
+          {recommendedEarlyMs != null && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+                추천: {recommendedEarlyMs}ms (네트워크 편도 지연)
+              </span>
+              <button
+                type="button"
+                onClick={() => setEarlyMs(recommendedEarlyMs)}
+                disabled={executing}
+                style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "4px", border: "1px solid var(--color-primary)", background: "transparent", color: "var(--color-primary)", cursor: "pointer" }}
+              >
+                적용
+              </button>
+            </div>
+          )}
+          <p style={{ fontSize: "0.7rem", color: "var(--color-muted)", marginTop: "0.4rem", lineHeight: 1.4 }}>
+            0ms = 서버 정시에 POST 제출 (네트워크 전파만큼 자연 지연). 값을 입력하면 그만큼 일찍 제출합니다.
+          </p>
+        </div>
+      )}
 
       {/* 이벤트 로그 */}
       {events.length > 0 && (
@@ -149,6 +281,36 @@ export default function ApplyExecution({ onReset }: ApplyExecutionProps) {
         </div>
       )}
 
+      {/* 신청 확인 결과 */}
+      {verifyResult && (
+        <div
+          style={{
+            marginTop: "0.75rem",
+            padding: "0.75rem",
+            borderRadius: "8px",
+            border: `1px solid ${verifyResult.verified ? "var(--color-success)" : "var(--color-error)"}`,
+            background: verifyResult.verified ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
+            <span style={{ fontSize: "1.1rem" }}>{verifyResult.verified ? "✅" : "❌"}</span>
+            <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>
+              {verifyResult.verified ? "서버 확인 완료 — 신청 접수됨" : "서버에서 신청 내역 미확인"}
+            </span>
+          </div>
+          {verifyResult.status && (
+            <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "0.15rem 0" }}>
+              서버 상태: <strong>{verifyResult.status}</strong>
+            </p>
+          )}
+          {verifyResult.eventTitle && (
+            <p style={{ fontSize: "0.8rem", color: "var(--color-muted)", margin: "0.15rem 0" }}>
+              이벤트: {verifyResult.eventTitle}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* 오류 */}
       {error && (
         <p className="error-message" role="alert" style={{ marginTop: "0.75rem" }}>
@@ -165,6 +327,17 @@ export default function ApplyExecution({ onReset }: ApplyExecutionProps) {
             aria-busy={executing}
           >
             {executing ? "신청 중..." : "신청 실행"}
+          </button>
+        )}
+        {phase === "completed" && (
+          <button
+            className="btn btn-primary"
+            onClick={handleVerify}
+            disabled={verifying}
+            aria-busy={verifying}
+            style={{ marginRight: "0.5rem" }}
+          >
+            {verifying ? "확인 중..." : "신청 확인"}
           </button>
         )}
         {isTerminal && (

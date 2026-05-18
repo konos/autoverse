@@ -14,6 +14,7 @@ import type {
   ApplyResult,
   ApplyEvent,
   TimeSyncResult,
+  VerifyResult,
 } from "../../shared/types";
 
 const POLL_INTERVAL_MS = 300;
@@ -31,7 +32,7 @@ export class ApplyEngine extends EventEmitter {
   private selectedRewardIds: number[] = [];
   private selectedConsentIds: number[] = [];
   // Safety guard: only one POST per engine instance
-  private postFired = false;
+  private postSubmitted = false;
 
   constructor(
     api: WeverseApi = new WeverseApi(),
@@ -131,10 +132,10 @@ export class ApplyEngine extends EventEmitter {
 
   /**
    * Execute the full apply flow:
-   * syncTime → calculateFireTime → waitUntilFireTime → timeGuard → POST → poll
-   * Single POST guarantee enforced by postFired flag.
+   * syncTime → calculateSubmitTime → waitUntilSubmitTime → timeGuard → POST → poll
+   * Single POST guarantee enforced by postSubmitted flag.
    */
-  async execute(): Promise<ApplyResult> {
+  async execute(earlyMs = 0): Promise<ApplyResult> {
     if (this.phase !== "armed") {
       throw new Error(`execute() 호출 불가 — 현재 상태: ${this.phase}`);
     }
@@ -176,18 +177,20 @@ export class ApplyEngine extends EventEmitter {
       data: {
         offsetMs: syncResult.offsetMs,
         rttMs: syncResult.rttMs,
+        recommendedEarlyMs: Math.round(syncResult.rttMs / 2),
         serverTime: syncResult.serverTime.toISOString(),
       },
     });
 
-    // ── 2. Calculate fire time ────────────────────────────────────────────────
+    // ── 2. Calculate submit time ─────────────────────────────────────────────
     const startAt = new Date(schema.applyPeriod.startAt);
-    const fireTimeMs = this.timing.calculateFireTime(startAt, syncResult);
+    logService.info("ApplyEngine", `earlyMs=${earlyMs} recommendedEarlyMs=${Math.round(syncResult.rttMs / 2)}`);
+    const submitTimeMs = this.timing.calculateSubmitTime(startAt, syncResult, earlyMs);
 
     this._setPhase("waiting");
 
-    // ── 3. Wait until fire time ───────────────────────────────────────────────
-    await this.timing.waitUntilFireTime(fireTimeMs);
+    // ── 3. Wait until submit time ─────────────────────────────────────────────
+    await this.timing.waitUntilSubmitTime(submitTimeMs);
 
     // ── 4. Time guard check ───────────────────────────────────────────────────
     if (!this.timing.isTimeGuardPassed(startAt, syncResult)) {
@@ -198,9 +201,9 @@ export class ApplyEngine extends EventEmitter {
     }
 
     // ── 5. Single POST safety guard ───────────────────────────────────────────
-    if (this.postFired) {
-      const msg = "POST 중복 차단 — 이미 발사됨";
-      this._emitError("post-guard", "POST_ALREADY_FIRED", msg);
+    if (this.postSubmitted) {
+      const msg = "POST 중복 차단 — 이미 제출됨";
+      this._emitError("post-guard", "POST_ALREADY_SUBMITTED", msg);
       this._setPhase("error");
       throw new Error(msg);
     }
@@ -230,12 +233,13 @@ export class ApplyEngine extends EventEmitter {
       throw err;
     }
 
-    // ── 7. Fire POST (once) ───────────────────────────────────────────────────
+    // ── 7. Submit POST (once) ──────────────────────────────────────────────────
     this._setPhase("firing");
-    this.postFired = true;
+    this.postSubmitted = true;
 
+    let serverDate: string | null = null;
     try {
-      await this.api.submitApplication(
+      const submitResult = await this.api.submitApplication(
         schema.applyHost,
         schema.artistCode,
         schema.eventPublicId,
@@ -243,20 +247,30 @@ export class ApplyEngine extends EventEmitter {
         schema.applyToken,
         payload,
       );
+      serverDate = submitResult.serverDate;
     } catch (err) {
       const e = err instanceof WeverseApiError ? err : new WeverseApiError("SUBMIT_FAILED", String(err));
-      this._emitError("post-fired", e.code, e.message, e.statusCode);
+      this._emitError("post-submitted", e.code, e.message, e.statusCode);
       this._setPhase("error");
       throw err;
     }
 
+    const serverDateIso = serverDate ? new Date(serverDate).toISOString() : "unknown";
+    const startAtIso = schema.applyPeriod?.startAt ?? "unknown";
+    if (serverDate && schema.applyPeriod?.startAt) {
+      const diffMs = new Date(serverDate).getTime() - new Date(schema.applyPeriod.startAt).getTime();
+      logService.info("ApplyEngine", `SERVER_TIMING serverDate=${serverDateIso} startAt=${startAtIso} diffMs=${diffMs}`);
+    } else {
+      logService.info("ApplyEngine", `SERVER_TIMING serverDate=${serverDateIso} startAt=${startAtIso}`);
+    }
+
     this._emitEvent({
-      type: "post-fired",
+      type: "post-submitted",
       timestamp: Date.now(),
       data: {
         eventId: schema.eventPublicId,
         artistCode: schema.artistCode,
-        // Never log applyToken or Authorization
+        serverDate: serverDateIso,
         tokenPreview: maskToken(token),
       },
     });
@@ -270,12 +284,12 @@ export class ApplyEngine extends EventEmitter {
 
     const executeStartMs = this.phaseTimestamps["syncing-time"] ?? Date.now();
     const totalElapsedMs = Date.now() - executeStartMs;
-    const postFiredAt = this.phaseTimestamps["firing"];
+    const postSubmittedAt = this.phaseTimestamps["firing"];
     const completedAt = result.completedAt;
 
     logService.info("ApplyEngine", `RESULT status=${result.status} completedAt=${new Date(completedAt).toISOString()} totalElapsedMs=${totalElapsedMs}`);
-    if (postFiredAt) {
-      logService.info("ApplyEngine", `TIMING postFiredAt=${new Date(postFiredAt).toISOString()} postToCompleteMs=${completedAt - postFiredAt}`);
+    if (postSubmittedAt) {
+      logService.info("ApplyEngine", `TIMING postSubmittedAt=${new Date(postSubmittedAt).toISOString()} postToCompleteMs=${completedAt - postSubmittedAt}`);
     }
 
     this._emitEvent({
@@ -285,7 +299,7 @@ export class ApplyEngine extends EventEmitter {
         status: result.status,
         completedAt: new Date(completedAt).toISOString(),
         totalElapsedMs,
-        postToCompleteMs: postFiredAt ? completedAt - postFiredAt : undefined,
+        postToCompleteMs: postSubmittedAt ? completedAt - postSubmittedAt : undefined,
       },
     });
 
@@ -296,10 +310,41 @@ export class ApplyEngine extends EventEmitter {
     return {
       phase: this.phase,
       phaseTimestamps: { ...this.phaseTimestamps },
-      postFired: this.postFired,
+      postSubmitted: this.postSubmitted,
       hasSchema: this.schema !== null,
       hasSyncResult: this.syncResult !== null,
     };
+  }
+
+  /**
+   * Verify application status by checking the server-side application list.
+   */
+  async verifyApplication(eventId: string): Promise<VerifyResult> {
+    const token = authService.token;
+    if (!token) {
+      return { verified: false };
+    }
+
+    try {
+      const resp = await this.api.fetchMyApplications(token);
+      const entry = resp.contents.find((e) => e.eventPublicId === eventId);
+      if (!entry) {
+        logService.info("ApplyEngine", `verify eventId=${eventId} not found in applications`);
+        return { verified: false };
+      }
+
+      const title = entry.eventTitle[entry.eventPrimaryLanguage] ?? Object.values(entry.eventTitle)[0] ?? "";
+      logService.info("ApplyEngine", `verify eventId=${eventId} status=${entry.status} title=${title}`);
+
+      return {
+        verified: entry.status === "APPLIED",
+        status: entry.status,
+        eventTitle: title,
+      };
+    } catch (err) {
+      logService.error("ApplyEngine", `verify error: ${String(err)}`);
+      return { verified: false };
+    }
   }
 
   reset(): void {
@@ -309,7 +354,7 @@ export class ApplyEngine extends EventEmitter {
     this.syncResult = null;
     this.selectedRewardIds = [];
     this.selectedConsentIds = [];
-    this.postFired = false;
+    this.postSubmitted = false;
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
@@ -369,11 +414,10 @@ export class ApplyEngine extends EventEmitter {
         data: { status: statusResp.status },
       });
 
-      if (statusResp.status === "COMPLETED") {
-        return { status: "COMPLETED", completedAt: Date.now() };
+      if (statusResp.status === "COMPLETED" || statusResp.status === "PROCESSING") {
+        return { status: statusResp.status, completedAt: Date.now() };
       }
 
-      // Any non-REQUESTED terminal status is an error
       if (statusResp.status !== "REQUESTED") {
         const msg = `신청 실패: ${statusResp.status}`;
         this._emitError("polling", "APPLY_REJECTED", msg);

@@ -4,6 +4,7 @@ import type {
   FormSchema,
   ApplyPayload,
   StatusResponse,
+  MyApplicationsResponse,
 } from "../../shared/types";
 
 const FAN_API_BASE = "https://fanevent-v2.weverse.io";
@@ -126,7 +127,7 @@ export class WeverseApi {
     token: string,
     applyToken: string,
     payload: ApplyPayload
-  ): Promise<void> {
+  ): Promise<{ serverDate: string | null }> {
     const url = `${applyHost}/apply-api/v1/artists/${encodeURIComponent(artistCode)}/events/${encodeURIComponent(eventId)}`;
     logService.info("WeverseApi", `submitApplication event=${eventId} artist=${artistCode} token=${maskToken(token)} applyToken=${maskToken(applyToken)}`);
 
@@ -154,9 +155,12 @@ export class WeverseApi {
       throw new WeverseApiError("NETWORK_ERROR", msg);
     }
 
+    const serverDate = res.headers.get("date");
+
     if (res.status === 200) {
-      logService.info("WeverseApi", `submitApplication status=200 event=${eventId}`);
-      return;
+      const serverTs = serverDate ? new Date(serverDate).toISOString() : "unknown";
+      logService.info("WeverseApi", `submitApplication status=200 event=${eventId} serverDate=${serverTs}`);
+      return { serverDate };
     }
 
     if (res.status === 401) {
@@ -219,6 +223,48 @@ export class WeverseApi {
     }
 
     logService.info("WeverseApi", `pollStatus result=${body.status} event=${eventId}`);
+    return body;
+  }
+
+  /**
+   * GET /api/fan-api/v1/fan/me/applications
+   * Returns the list of user's event applications.
+   */
+  async fetchMyApplications(token: string): Promise<MyApplicationsResponse> {
+    const url = `${FAN_API_BASE}/api/fan-api/v1/fan/me/applications`;
+    logService.info("WeverseApi", `fetchMyApplications token=${maskToken(token)}`);
+
+    let res: Response;
+    try {
+      res = await timedFetch(url, {
+        method: "GET",
+        headers: commonHeaders(token),
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.name === "AbortError"
+          ? "신청 내역 조회 타임아웃"
+          : `신청 내역 네트워크 에러: ${String(err)}`;
+      logService.error("WeverseApi", `fetchMyApplications error: ${msg}`);
+      throw new WeverseApiError("NETWORK_ERROR", msg);
+    }
+
+    if (res.status === 401) {
+      throw new WeverseApiError("UNAUTHORIZED", "토큰이 만료됐습니다.", 401);
+    }
+
+    if (!res.ok) {
+      throw new WeverseApiError("HTTP_ERROR", `신청 내역 조회 실패: HTTP ${res.status}`, res.status);
+    }
+
+    let body: MyApplicationsResponse;
+    try {
+      body = (await res.json()) as MyApplicationsResponse;
+    } catch {
+      throw new WeverseApiError("PARSE_ERROR", "신청 내역 JSON 파싱 실패");
+    }
+
+    logService.info("WeverseApi", `fetchMyApplications ok count=${body.contents.length}`);
     return body;
   }
 }

@@ -16,9 +16,10 @@ const api: IpcApi = {
     fetchForm: (eventId: string) => ipcRenderer.invoke("apply:fetch-form", eventId),
     arm: (rewardIds: number[], consentIds: number[]) =>
       ipcRenderer.invoke("apply:arm", rewardIds, consentIds),
-    execute: () => ipcRenderer.invoke("apply:execute"),
+    execute: (earlyMs?: number) => ipcRenderer.invoke("apply:execute", earlyMs),
     getState: () => ipcRenderer.invoke("apply:state"),
     reset: () => ipcRenderer.invoke("apply:reset"),
+    verify: (eventId: string) => ipcRenderer.invoke("apply:verify", eventId),
   },
   log: {
     onEntry: (cb: (entry: LogEntry) => void) => {

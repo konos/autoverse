@@ -77,14 +77,21 @@ export function registerIpcHandlers(): void {
       applyEngine.arm(rewardIds, consentIds)
   );
 
-  // apply:execute — run the full apply flow
-  ipcMain.handle("apply:execute", async () => applyEngine.execute());
+  // apply:execute — run the full apply flow (earlyMs: user-configured pre-submit offset)
+  ipcMain.handle("apply:execute", async (_evt, earlyMs?: number) =>
+    applyEngine.execute(earlyMs ?? 0)
+  );
 
   // apply:state — query current engine state
   ipcMain.handle("apply:state", async () => applyEngine.getState());
 
   // apply:reset — reset engine for next event
   ipcMain.handle("apply:reset", async () => applyEngine.reset());
+
+  // apply:verify — check application status from server
+  ipcMain.handle("apply:verify", async (_evt, eventId: string) =>
+    applyEngine.verifyApplication(eventId)
+  );
 
   // log:download — SaveDialog → fs.copyFile to user-chosen destination
   ipcMain.handle("log:download", async () => {
@@ -116,5 +123,6 @@ export function unregisterIpcHandlers(): void {
   ipcMain.removeHandler("apply:execute");
   ipcMain.removeHandler("apply:state");
   ipcMain.removeHandler("apply:reset");
+  ipcMain.removeHandler("apply:verify");
   ipcMain.removeHandler("log:download");
 }

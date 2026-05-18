@@ -106,13 +106,19 @@ export default function EventSetup({ onFormFetched }: EventSetupProps) {
             <span className="status-label">신청 유형</span>
             <span className="status-value">{fetched.applyType}</span>
           </div>
-          <div className="status-row">
-            <span className="status-label">신청 시작</span>
-            <span className="status-value">{formatDate(fetched.applyPeriod.startAt)}</span>
-          </div>
-          <div className="status-row">
-            <span className="status-label">신청 종료</span>
-            <span className="status-value">{formatDate(fetched.applyPeriod.endAt)}</span>
+          <div className="period-info" style={{ marginTop: "0.5rem", padding: "0.6rem 0.75rem", background: "var(--color-bg)", borderRadius: "6px", border: "1px solid var(--color-border)" }}>
+            <div className="status-row" style={{ marginBottom: "0.25rem" }}>
+              <span className="status-label">폼 오픈</span>
+              <span className="status-value">{formatDate(fetched.applyPeriod.formOpenAt)}</span>
+            </div>
+            <div className="status-row" style={{ marginBottom: "0.25rem" }}>
+              <span className="status-label">신청 시작</span>
+              <span className="status-value" style={{ fontWeight: 600, color: "var(--color-primary)" }}>{formatDate(fetched.applyPeriod.startAt)}</span>
+            </div>
+            <div className="status-row" style={{ marginBottom: 0 }}>
+              <span className="status-label">신청 종료</span>
+              <span className="status-value">{formatDate(fetched.applyPeriod.endAt)}</span>
+            </div>
           </div>
         </div>
       )}
