@@ -1,10 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { Profile, AuthEvent, ApplyEvent, LogEntry, IpcApi } from "../shared/types";
+import type { Profile, AuthEvent, ApplyEvent, LogEntry, IpcApi, CredentialLoginResult } from "../shared/types";
 
 const api: IpcApi = {
   auth: {
     getStatus: () => ipcRenderer.invoke("auth:status"),
     openLogin: () => ipcRenderer.invoke("auth:open-login"),
+    credentialLogin: (email: string, password: string): Promise<CredentialLoginResult> =>
+      ipcRenderer.invoke("auth:credential-login", email, password),
+    submitOtp: (otpCode: string): Promise<CredentialLoginResult> =>
+      ipcRenderer.invoke("auth:submit-otp", otpCode),
     validateToken: () => ipcRenderer.invoke("auth:validate-token"),
   },
   profile: {

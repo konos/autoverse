@@ -1,12 +1,29 @@
 import { EventEmitter } from "events";
-import { BrowserWindow } from "electron";
+import { BrowserWindow, net, session } from "electron";
 import { maskToken } from "../../shared/mask";
-import type { AuthStatus, AuthEvent } from "../../shared/types";
+import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/types";
 import { logService } from "./log-service";
 
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
 const VALIDATE_TIMEOUT_MS = 5_000;
+
+const ACCOUNT_API = "https://accountapi.weverse.io";
+const ACC_APP_SECRET = "5419526f1c624b38b10787e5c10b2a7a";
+const ACC_SERVICE_ID = "weverse";
+
+function accountHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "x-acc-app-secret": ACC_APP_SECRET,
+    "x-acc-service-id": ACC_SERVICE_ID,
+    "x-acc-trace-id": crypto.randomUUID(),
+    "x-acc-app-version": "4.5.0",
+    "x-acc-language": "ko",
+    Origin: "https://account.weverse.io",
+    Referer: "https://account.weverse.io/",
+  };
+}
 
 export interface FansMe {
   fanId: number;
@@ -28,6 +45,11 @@ export class AuthService extends EventEmitter {
   private cachedFanId: number | undefined = undefined;
   private loginWindow: BrowserWindow | null = null;
 
+  // Credential login state
+  private pendingCredEmail: string | null = null;
+  private pendingCredPassword: string | null = null;
+  private pendingOtpSessionId: string | null = null;
+
   get token(): string | null {
     return this.cachedToken;
   }
@@ -39,6 +61,217 @@ export class AuthService extends EventEmitter {
       fanId: this.cachedFanId,
       tokenPreview: maskToken(this.cachedToken),
     };
+  }
+
+  /**
+   * Credential login — pure API calls, no browser window.
+   * Step 1: POST /v4/auth/token/by-credentials
+   * If OTP required (-25044), emits otp-required and returns { needOtp: true }.
+   * If OTP not required, extracts token from session cookies.
+   */
+  async credentialLogin(email: string, password: string): Promise<CredentialLoginResult> {
+    logService.info("AuthService", "credentialLogin: starting");
+    this._emit({ type: "credential-login-progress", message: "로그인 시도 중...", timestamp: Date.now() });
+
+    this.pendingCredEmail = email;
+    this.pendingCredPassword = password;
+
+    const ses = session.fromPartition("persist:weverse");
+    // Clear old cookies
+    try {
+      const old = await ses.cookies.get({ name: "we2_access_token" });
+      for (const c of old) {
+        const scheme = c.secure ? "https" : "http";
+        const domain = c.domain?.startsWith(".") ? c.domain.slice(1) : c.domain;
+        await ses.cookies.remove(`${scheme}://${domain}${c.path ?? "/"}`, c.name).catch(() => {});
+      }
+    } catch { /* ok */ }
+
+    try {
+      const body = JSON.stringify({ email, password });
+      const res = await this.accountFetch("POST", "/web/api/v4/auth/token/by-credentials", body);
+      const text = await res.text();
+      logService.info("AuthService", `credentialLogin: status=${res.status} body=${text.slice(0, 300)}`);
+
+      if (res.status === 200) {
+        // OTP not needed — token should be in cookies
+        return this.extractTokenFromSession();
+      }
+
+      if (res.status === 400) {
+        let parsed: { code?: number; otpSessionId?: string } = {};
+        try { parsed = JSON.parse(text); } catch { /* ignore */ }
+
+        if (parsed.code === -25044) {
+          // OTP required — need to get otpSessionId from response or generate session
+          if (parsed.otpSessionId) {
+            this.pendingOtpSessionId = parsed.otpSessionId;
+          }
+          // Send OTP email
+          await this.sendOtp();
+          this._emit({ type: "otp-required", message: "이메일 OTP 인증이 필요합니다. 이메일을 확인해주세요.", timestamp: Date.now() });
+          return { success: false, needOtp: true, message: "이메일 OTP 인증이 필요합니다." };
+        }
+
+        const msg = `로그인 실패: ${text.slice(0, 200)}`;
+        this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+        return { success: false, message: msg };
+      }
+
+      const msg = `로그인 실패: HTTP ${res.status}`;
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    } catch (err) {
+      const msg = `로그인 네트워크 오류: ${err instanceof Error ? err.message : String(err)}`;
+      logService.error("AuthService", msg);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    }
+  }
+
+  /**
+   * Step 2 (if OTP required): User submits 6-digit OTP code.
+   * POST /v3/auth/token/by-credentials-with-otp
+   */
+  async submitOtp(otpCode: string): Promise<CredentialLoginResult> {
+    if (!this.pendingCredEmail || !this.pendingCredPassword) {
+      return { success: false, message: "로그인 세션이 없습니다. 다시 로그인해주세요." };
+    }
+
+    logService.info("AuthService", "submitOtp: submitting OTP code");
+    this._emit({ type: "credential-login-progress", message: "OTP 인증 중...", timestamp: Date.now() });
+
+    try {
+      const body: Record<string, string> = {
+        email: this.pendingCredEmail,
+        password: this.pendingCredPassword,
+        otpCode,
+      };
+      if (this.pendingOtpSessionId) {
+        body.otpSessionId = this.pendingOtpSessionId;
+      }
+
+      const res = await this.accountFetch(
+        "POST",
+        "/web/api/v3/auth/token/by-credentials-with-otp",
+        JSON.stringify(body),
+      );
+      const text = await res.text();
+      logService.info("AuthService", `submitOtp: status=${res.status} bodyLen=${text.length}`);
+
+      if (res.status === 200) {
+        return this.extractTokenFromSession();
+      }
+
+      const msg = `OTP 인증 실패: HTTP ${res.status} — ${text.slice(0, 200)}`;
+      logService.error("AuthService", msg);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    } catch (err) {
+      const msg = `OTP 네트워크 오류: ${err instanceof Error ? err.message : String(err)}`;
+      logService.error("AuthService", msg);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    }
+  }
+
+  /** Send OTP email via POST /v2/auth/otp */
+  private async sendOtp(): Promise<void> {
+    const body: Record<string, string> = {};
+    if (this.pendingOtpSessionId) {
+      body.otpSessionId = this.pendingOtpSessionId;
+    }
+    try {
+      const res = await this.accountFetch("POST", "/web/api/v2/auth/otp", JSON.stringify(body));
+      logService.info("AuthService", `sendOtp: status=${res.status}`);
+    } catch (err) {
+      logService.error("AuthService", `sendOtp error: ${String(err)}`);
+    }
+  }
+
+  /** Extract we2_access_token from session cookies after successful auth */
+  private async extractTokenFromSession(): Promise<CredentialLoginResult> {
+    // First try GET /v2/auth/token which may return the token in the response body
+    try {
+      const tokenRes = await this.accountFetch("GET", "/web/api/v2/auth/token", undefined);
+      const tokenText = await tokenRes.text();
+      logService.info("AuthService", `extractTokenFromSession: GET auth/token status=${tokenRes.status} bodyLen=${tokenText.length}`);
+
+      if (tokenRes.status === 200 && tokenText.length > 0) {
+        try {
+          const tokenData = JSON.parse(tokenText) as { accessToken?: string; token?: string };
+          const token = tokenData.accessToken ?? tokenData.token;
+          if (token) {
+            logService.info("AuthService", `extractTokenFromSession: got token from response body len=${token.length}`);
+            this.cachedToken = token;
+            this._emit({ type: "login-success", message: `토큰 추출 성공: ${maskToken(token)}`, timestamp: Date.now() });
+            this.validateToken().catch((err) => {
+              logService.error("AuthService", `post-credential-login validateToken failed: ${String(err)}`);
+            });
+            return { success: true };
+          }
+        } catch { /* body isn't JSON with token, try cookies */ }
+      }
+    } catch (err) {
+      logService.warn("AuthService", `extractTokenFromSession: GET auth/token failed: ${String(err)}`);
+    }
+
+    // Fallback: check cookies
+    const wvSession = session.fromPartition("persist:weverse");
+    const cookies = await wvSession.cookies.get({ name: "we2_access_token" }).catch(() => []);
+    logService.info("AuthService", `extractTokenFromSession: found ${cookies.length} we2_access_token cookies`);
+
+    for (const c of cookies) {
+      if (c.value && !this.isTokenExpired(c.value)) {
+        this.cachedToken = c.value;
+        logService.info("AuthService", `extractTokenFromSession: cookie token len=${c.value.length}`);
+        this._emit({ type: "login-success", message: `토큰 추출 성공: ${maskToken(c.value)}`, timestamp: Date.now() });
+        this.validateToken().catch((err) => {
+          logService.error("AuthService", `post-credential-login validateToken failed: ${String(err)}`);
+        });
+        return { success: true };
+      }
+    }
+
+    const msg = "로그인 성공했으나 토큰을 추출하지 못했습니다";
+    logService.error("AuthService", msg);
+    this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+    return { success: false, message: msg };
+  }
+
+  /** Make an API request to accountapi.weverse.io using Electron net (cookie-aware) */
+  private accountFetch(
+    method: string,
+    path: string,
+    body: string | undefined,
+  ): Promise<{ status: number; text: () => Promise<string> }> {
+    const url = `${ACCOUNT_API}${path}`;
+    return new Promise((resolve, reject) => {
+      const req = net.request({
+        method,
+        url,
+        partition: "persist:weverse",
+      });
+      const headers = accountHeaders();
+      for (const [k, v] of Object.entries(headers)) {
+        req.setHeader(k, v);
+      }
+      req.on("response", (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => {
+          const fullBody = Buffer.concat(chunks).toString("utf-8");
+          resolve({
+            status: response.statusCode,
+            text: () => Promise.resolve(fullBody),
+          });
+        });
+        response.on("error", reject);
+      });
+      req.on("error", reject);
+      if (body) req.write(body);
+      req.end();
+    });
   }
 
   /** Open Weverse login in a child BrowserWindow with isolated cookie partition */

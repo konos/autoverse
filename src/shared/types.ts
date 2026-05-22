@@ -245,15 +245,25 @@ export interface AuthEvent {
     | "login-failed"
     | "token-expired"
     | "token-validated"
-    | "cookie-extraction-failed";
+    | "cookie-extraction-failed"
+    | "otp-required"
+    | "credential-login-progress";
   message?: string;
   timestamp: number;
+}
+
+export interface CredentialLoginResult {
+  success: boolean;
+  needOtp?: boolean;
+  message?: string;
 }
 
 export interface IpcApi {
   auth: {
     getStatus: () => Promise<AuthStatus>;
     openLogin: () => Promise<void>;
+    credentialLogin: (email: string, password: string) => Promise<CredentialLoginResult>;
+    submitOtp: (otpCode: string) => Promise<CredentialLoginResult>;
     validateToken: () => Promise<AuthStatus>;
   };
   profile: {

@@ -45,6 +45,16 @@ export function registerIpcHandlers(): void {
     await authService.login(mainWindowRef);
   });
 
+  // auth:credential-login — email/password login via API
+  ipcMain.handle("auth:credential-login", async (_evt, email: string, password: string) =>
+    authService.credentialLogin(email, password)
+  );
+
+  // auth:submit-otp — submit OTP code for credential login
+  ipcMain.handle("auth:submit-otp", async (_evt, otpCode: string) =>
+    authService.submitOtp(otpCode)
+  );
+
   // auth:validate-token — calls GET /fans/me
   ipcMain.handle("auth:validate-token", async () =>
     authService.validateToken()
@@ -114,6 +124,8 @@ export function unregisterIpcHandlers(): void {
   logService.off("log-entry", forwardLogEntry);
   ipcMain.removeHandler("auth:status");
   ipcMain.removeHandler("auth:open-login");
+  ipcMain.removeHandler("auth:credential-login");
+  ipcMain.removeHandler("auth:submit-otp");
   ipcMain.removeHandler("auth:validate-token");
   ipcMain.removeHandler("profile:save");
   ipcMain.removeHandler("profile:get");
