@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { BrowserWindow, net, session } from "electron";
+import { BrowserWindow, session } from "electron";
 import { maskToken } from "../../shared/mask";
 import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/types";
 import { logService } from "./log-service";
@@ -8,47 +8,21 @@ const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
 const VALIDATE_TIMEOUT_MS = 5_000;
 
-const ACCOUNT_API = "https://accountapi.weverse.io";
-const ACC_APP_SECRET = "5419526f1c624b38b10787e5c10b2a7a";
-const ACC_SERVICE_ID = "weverse";
-
-function accountHeaders(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    "x-acc-app-secret": ACC_APP_SECRET,
-    "x-acc-service-id": ACC_SERVICE_ID,
-    "x-acc-trace-id": crypto.randomUUID(),
-    "x-acc-app-version": "4.5.0",
-    "x-acc-language": "ko",
-    Origin: "https://account.weverse.io",
-    Referer: "https://account.weverse.io/",
-  };
-}
+const LOGIN_URL =
+  "https://account.weverse.io/ko/login/credential?client_id=weverse&v=4";
 
 export interface FansMe {
   fanId: number;
   [key: string]: unknown;
 }
 
-/**
- * AuthService — manages Weverse login lifecycle and token validation.
- *
- * Events:
- *   login-success        { token: string (masked) }
- *   login-failed         { message: string }
- *   cookie-extraction-failed  { message: string }
- *   token-validated      { fanId: number }
- *   token-expired        { message: string }
- */
 export class AuthService extends EventEmitter {
   private cachedToken: string | null = null;
   private cachedFanId: number | undefined = undefined;
   private loginWindow: BrowserWindow | null = null;
 
-  // Credential login state
-  private pendingCredEmail: string | null = null;
-  private pendingCredPassword: string | null = null;
-  private pendingOtpSessionId: string | null = null;
+  // Headless login state
+  private headlessWindow: BrowserWindow | null = null;
 
   get token(): string | null {
     return this.cachedToken;
@@ -64,20 +38,16 @@ export class AuthService extends EventEmitter {
   }
 
   /**
-   * Credential login — pure API calls, no browser window.
-   * Step 1: POST /v4/auth/token/by-credentials
-   * If OTP required (-25044), emits otp-required and returns { needOtp: true }.
-   * If OTP not required, extracts token from session cookies.
+   * Headless credential login — opens an invisible BrowserWindow,
+   * fills email/password via DOM injection, waits for OTP if needed.
    */
   async credentialLogin(email: string, password: string): Promise<CredentialLoginResult> {
-    logService.info("AuthService", "credentialLogin: starting");
+    logService.info("AuthService", "credentialLogin(headless): starting");
     this._emit({ type: "credential-login-progress", message: "로그인 시도 중...", timestamp: Date.now() });
 
-    this.pendingCredEmail = email;
-    this.pendingCredPassword = password;
+    this.cleanupHeadless();
 
     const ses = session.fromPartition("persist:weverse");
-    // Clear old cookies
     try {
       const old = await ses.cookies.get({ name: "we2_access_token" });
       for (const c of old) {
@@ -87,191 +57,254 @@ export class AuthService extends EventEmitter {
       }
     } catch { /* ok */ }
 
-    try {
-      const body = JSON.stringify({ email, password });
-      const res = await this.accountFetch("POST", "/web/api/v4/auth/token/by-credentials", body);
-      const text = await res.text();
-      logService.info("AuthService", `credentialLogin: status=${res.status} body=${text.slice(0, 300)}`);
+    const win = new BrowserWindow({
+      width: 500,
+      height: 700,
+      show: false,
+      webPreferences: {
+        partition: "persist:weverse",
+        nodeIntegration: false,
+        contextIsolation: true,
+        offscreen: true,
+      },
+    });
+    this.headlessWindow = win;
 
-      if (res.status === 200) {
-        // OTP not needed — token should be in cookies
-        return this.extractTokenFromSession();
+    try {
+      await win.loadURL(LOGIN_URL);
+      logService.info("AuthService", "credentialLogin(headless): login page loaded");
+
+      // Wait for the email input to appear
+      await win.webContents.executeJavaScript(`
+        new Promise((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error("login form timeout")), 15000);
+          const check = () => {
+            const el = document.querySelector('input[placeholder="your@email.com"]');
+            if (el) { clearTimeout(t); resolve(true); }
+            else setTimeout(check, 200);
+          };
+          check();
+        });
+      `);
+
+      // Fill email and password
+      await win.webContents.executeJavaScript(`
+        (function() {
+          const emailInput = document.querySelector('input[placeholder="your@email.com"]');
+          const pwInput = document.querySelector('input[type="password"]');
+          if (!emailInput || !pwInput) throw new Error("input fields not found");
+
+          function setReactValue(el, value) {
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype, 'value'
+            ).set;
+            nativeInputValueSetter.call(el, value);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          setReactValue(emailInput, ${JSON.stringify(email)});
+          setReactValue(pwInput, ${JSON.stringify(password)});
+        })();
+      `);
+
+      // Small delay for React state to update, then click login
+      await new Promise(r => setTimeout(r, 500));
+
+      await win.webContents.executeJavaScript(`
+        (function() {
+          const btns = Array.from(document.querySelectorAll('button'));
+          const loginBtn = btns.find(b => b.textContent.trim() === '로그인');
+          if (!loginBtn) throw new Error("login button not found");
+          if (loginBtn.disabled) throw new Error("login button is disabled");
+          loginBtn.click();
+        })();
+      `);
+
+      logService.info("AuthService", "credentialLogin(headless): login button clicked, waiting for response");
+
+      // Wait for OTP input or redirect (token cookie)
+      const result = await win.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const t = setTimeout(() => resolve("timeout"), 20000);
+          const check = () => {
+            // Check for OTP input
+            const otpInput = document.querySelector('input[placeholder="인증코드 6자리"]');
+            if (otpInput) { clearTimeout(t); resolve("otp"); return; }
+            // Check for error messages
+            const errorEl = document.querySelector('[class*="error"], [class*="Error"]');
+            if (errorEl && errorEl.textContent.trim()) {
+              // Only resolve error if it's not a transient state
+              const text = errorEl.textContent.trim();
+              if (text.length > 5) { clearTimeout(t); resolve("error:" + text); return; }
+            }
+            setTimeout(check, 300);
+          };
+          setTimeout(check, 1000);
+        });
+      `) as string;
+
+      if (result === "otp") {
+        logService.info("AuthService", "credentialLogin(headless): OTP required");
+        this._emit({ type: "otp-required", message: "이메일 OTP 인증이 필요합니다. 이메일을 확인해주세요.", timestamp: Date.now() });
+        return { success: false, needOtp: true, message: "이메일 OTP 인증이 필요합니다." };
       }
 
-      if (res.status === 400) {
-        let parsed: { code?: number; otpSessionId?: string } = {};
-        try { parsed = JSON.parse(text); } catch { /* ignore */ }
+      if (result === "timeout") {
+        // Check if we got a token during the wait
+        const token = await this.extractTokenFromCookies();
+        if (token) return { success: true };
 
-        if (parsed.code === -25044) {
-          // OTP required — need to get otpSessionId from response or generate session
-          if (parsed.otpSessionId) {
-            this.pendingOtpSessionId = parsed.otpSessionId;
-          }
-          // Send OTP email
-          await this.sendOtp();
-          this._emit({ type: "otp-required", message: "이메일 OTP 인증이 필요합니다. 이메일을 확인해주세요.", timestamp: Date.now() });
-          return { success: false, needOtp: true, message: "이메일 OTP 인증이 필요합니다." };
-        }
-
-        const msg = `로그인 실패: ${text.slice(0, 200)}`;
+        const msg = "로그인 응답 대기 시간 초과";
+        logService.error("AuthService", msg);
         this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+        this.cleanupHeadless();
         return { success: false, message: msg };
       }
 
-      const msg = `로그인 실패: HTTP ${res.status}`;
-      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
-      return { success: false, message: msg };
+      if (result.startsWith("error:")) {
+        const msg = result.slice(6);
+        logService.error("AuthService", `credentialLogin(headless): form error: ${msg}`);
+        this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+        this.cleanupHeadless();
+        return { success: false, message: msg };
+      }
+
+      this.cleanupHeadless();
+      return { success: false, message: "알 수 없는 상태" };
     } catch (err) {
-      const msg = `로그인 네트워크 오류: ${err instanceof Error ? err.message : String(err)}`;
+      const msg = `로그인 오류: ${err instanceof Error ? err.message : String(err)}`;
       logService.error("AuthService", msg);
       this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      this.cleanupHeadless();
       return { success: false, message: msg };
     }
   }
 
   /**
-   * Step 2 (if OTP required): User submits 6-digit OTP code.
-   * POST /v3/auth/token/by-credentials-with-otp
+   * Submit OTP code into the headless browser window.
    */
   async submitOtp(otpCode: string): Promise<CredentialLoginResult> {
-    if (!this.pendingCredEmail || !this.pendingCredPassword) {
+    if (!this.headlessWindow || this.headlessWindow.isDestroyed()) {
       return { success: false, message: "로그인 세션이 없습니다. 다시 로그인해주세요." };
     }
 
-    logService.info("AuthService", "submitOtp: submitting OTP code");
+    logService.info("AuthService", "submitOtp(headless): entering OTP");
     this._emit({ type: "credential-login-progress", message: "OTP 인증 중...", timestamp: Date.now() });
 
+    const win = this.headlessWindow;
+
     try {
-      const body: Record<string, string> = {
-        email: this.pendingCredEmail,
-        password: this.pendingCredPassword,
-        otpCode,
-      };
-      if (this.pendingOtpSessionId) {
-        body.otpSessionId = this.pendingOtpSessionId;
+      // Fill OTP code
+      await win.webContents.executeJavaScript(`
+        (function() {
+          const otpInput = document.querySelector('input[placeholder="인증코드 6자리"]');
+          if (!otpInput) throw new Error("OTP input not found");
+
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value'
+          ).set;
+          nativeInputValueSetter.call(otpInput, ${JSON.stringify(otpCode)});
+          otpInput.dispatchEvent(new Event('input', { bubbles: true }));
+          otpInput.dispatchEvent(new Event('change', { bubbles: true }));
+        })();
+      `);
+
+      await new Promise(r => setTimeout(r, 500));
+
+      // Click the OTP confirm button
+      await win.webContents.executeJavaScript(`
+        (function() {
+          const btns = Array.from(document.querySelectorAll('button'));
+          const confirmBtn = btns.find(b => b.textContent.trim() === '인증코드 확인');
+          if (!confirmBtn) throw new Error("OTP confirm button not found");
+          if (confirmBtn.disabled) throw new Error("OTP confirm button is disabled — check code length");
+          confirmBtn.click();
+        })();
+      `);
+
+      logService.info("AuthService", "submitOtp(headless): OTP confirm clicked, waiting for result");
+
+      // Wait for redirect/token or error
+      const token = await this.waitForTokenAfterOtp(win);
+      if (token) {
+        this.cleanupHeadless();
+        return { success: true };
       }
 
-      const res = await this.accountFetch(
-        "POST",
-        "/web/api/v3/auth/token/by-credentials-with-otp",
-        JSON.stringify(body),
-      );
-      const text = await res.text();
-      logService.info("AuthService", `submitOtp: status=${res.status} bodyLen=${text.length}`);
-
-      if (res.status === 200) {
-        return this.extractTokenFromSession();
-      }
-
-      const msg = `OTP 인증 실패: HTTP ${res.status} — ${text.slice(0, 200)}`;
-      logService.error("AuthService", msg);
-      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
-      return { success: false, message: msg };
-    } catch (err) {
-      const msg = `OTP 네트워크 오류: ${err instanceof Error ? err.message : String(err)}`;
-      logService.error("AuthService", msg);
-      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
-      return { success: false, message: msg };
-    }
-  }
-
-  /** Send OTP email via POST /v2/auth/otp */
-  private async sendOtp(): Promise<void> {
-    const body: Record<string, string> = {};
-    if (this.pendingOtpSessionId) {
-      body.otpSessionId = this.pendingOtpSessionId;
-    }
-    try {
-      const res = await this.accountFetch("POST", "/web/api/v2/auth/otp", JSON.stringify(body));
-      logService.info("AuthService", `sendOtp: status=${res.status}`);
-    } catch (err) {
-      logService.error("AuthService", `sendOtp error: ${String(err)}`);
-    }
-  }
-
-  /** Extract we2_access_token from session cookies after successful auth */
-  private async extractTokenFromSession(): Promise<CredentialLoginResult> {
-    // First try GET /v2/auth/token which may return the token in the response body
-    try {
-      const tokenRes = await this.accountFetch("GET", "/web/api/v2/auth/token", undefined);
-      const tokenText = await tokenRes.text();
-      logService.info("AuthService", `extractTokenFromSession: GET auth/token status=${tokenRes.status} bodyLen=${tokenText.length}`);
-
-      if (tokenRes.status === 200 && tokenText.length > 0) {
-        try {
-          const tokenData = JSON.parse(tokenText) as { accessToken?: string; token?: string };
-          const token = tokenData.accessToken ?? tokenData.token;
-          if (token) {
-            logService.info("AuthService", `extractTokenFromSession: got token from response body len=${token.length}`);
-            this.cachedToken = token;
-            this._emit({ type: "login-success", message: `토큰 추출 성공: ${maskToken(token)}`, timestamp: Date.now() });
-            this.validateToken().catch((err) => {
-              logService.error("AuthService", `post-credential-login validateToken failed: ${String(err)}`);
-            });
-            return { success: true };
+      // Check for error message in the page
+      const errorMsg = await win.webContents.executeJavaScript(`
+        (function() {
+          const errs = document.querySelectorAll('[class*="error"], [class*="Error"], [role="alert"]');
+          for (const el of errs) {
+            const t = el.textContent.trim();
+            if (t.length > 3) return t;
           }
-        } catch { /* body isn't JSON with token, try cookies */ }
-      }
+          return null;
+        })();
+      `).catch(() => null) as string | null;
+
+      const msg = errorMsg ?? "OTP 인증 실패";
+      logService.error("AuthService", `submitOtp(headless): ${msg}`);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
     } catch (err) {
-      logService.warn("AuthService", `extractTokenFromSession: GET auth/token failed: ${String(err)}`);
+      const msg = `OTP 오류: ${err instanceof Error ? err.message : String(err)}`;
+      logService.error("AuthService", msg);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    }
+  }
+
+  private async waitForTokenAfterOtp(win: BrowserWindow): Promise<boolean> {
+    const maxWait = 20_000;
+    const interval = 500;
+    const start = Date.now();
+
+    while (Date.now() - start < maxWait) {
+      if (win.isDestroyed()) return false;
+
+      const token = await this.extractTokenFromCookies();
+      if (token) return true;
+
+      // Check if URL navigated away from login page (indicates success)
+      const url = win.webContents.getURL();
+      if (url.includes("weverse.io") && !url.includes("account.weverse.io")) {
+        logService.info("AuthService", `submitOtp: redirected to ${url}, checking cookies`);
+        await new Promise(r => setTimeout(r, 1000));
+        const tokenAfterRedirect = await this.extractTokenFromCookies();
+        if (tokenAfterRedirect) return true;
+      }
+
+      await new Promise(r => setTimeout(r, interval));
     }
 
-    // Fallback: check cookies
-    const wvSession = session.fromPartition("persist:weverse");
-    const cookies = await wvSession.cookies.get({ name: "we2_access_token" }).catch(() => []);
-    logService.info("AuthService", `extractTokenFromSession: found ${cookies.length} we2_access_token cookies`);
+    return false;
+  }
+
+  private async extractTokenFromCookies(): Promise<boolean> {
+    const ses = session.fromPartition("persist:weverse");
+    const cookies = await ses.cookies.get({ name: "we2_access_token" }).catch(() => []);
 
     for (const c of cookies) {
       if (c.value && !this.isTokenExpired(c.value)) {
         this.cachedToken = c.value;
-        logService.info("AuthService", `extractTokenFromSession: cookie token len=${c.value.length}`);
+        logService.info("AuthService", `extractTokenFromCookies: token len=${c.value.length}`);
         this._emit({ type: "login-success", message: `토큰 추출 성공: ${maskToken(c.value)}`, timestamp: Date.now() });
         this.validateToken().catch((err) => {
           logService.error("AuthService", `post-credential-login validateToken failed: ${String(err)}`);
         });
-        return { success: true };
+        return true;
       }
     }
-
-    const msg = "로그인 성공했으나 토큰을 추출하지 못했습니다";
-    logService.error("AuthService", msg);
-    this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
-    return { success: false, message: msg };
+    return false;
   }
 
-  /** Make an API request to accountapi.weverse.io using Electron net (cookie-aware) */
-  private accountFetch(
-    method: string,
-    path: string,
-    body: string | undefined,
-  ): Promise<{ status: number; text: () => Promise<string> }> {
-    const url = `${ACCOUNT_API}${path}`;
-    return new Promise((resolve, reject) => {
-      const req = net.request({
-        method,
-        url,
-        partition: "persist:weverse",
-      });
-      const headers = accountHeaders();
-      for (const [k, v] of Object.entries(headers)) {
-        req.setHeader(k, v);
-      }
-      req.on("response", (response) => {
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => chunks.push(chunk));
-        response.on("end", () => {
-          const fullBody = Buffer.concat(chunks).toString("utf-8");
-          resolve({
-            status: response.statusCode,
-            text: () => Promise.resolve(fullBody),
-          });
-        });
-        response.on("error", reject);
-      });
-      req.on("error", reject);
-      if (body) req.write(body);
-      req.end();
-    });
+  private cleanupHeadless(): void {
+    if (this.headlessWindow && !this.headlessWindow.isDestroyed()) {
+      this.headlessWindow.close();
+    }
+    this.headlessWindow = null;
   }
 
   /** Open Weverse login in a child BrowserWindow with isolated cookie partition */
