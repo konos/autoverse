@@ -62,12 +62,17 @@ export class AuthService extends EventEmitter {
     const win = this.loginWindow;
     let tokenExtracted = false;
 
-    // Clear stale we2_access_token cookies before polling so the user
-    // actually goes through the login flow instead of re-extracting an
-    // already-expired token from the persistent partition.
+    // Flush all cookies from the weverse partition so the user actually
+    // goes through the login flow instead of re-extracting an expired token.
     const session = win.webContents.session;
-    await session.cookies.remove("https://weverse.io", "we2_access_token").catch(() => {});
-    await session.cookies.remove("https://.weverse.io", "we2_access_token").catch(() => {});
+    try {
+      const allCookies = await session.cookies.get({ name: "we2_access_token" });
+      for (const c of allCookies) {
+        const scheme = c.secure ? "https" : "http";
+        const domain = c.domain?.startsWith(".") ? c.domain.slice(1) : c.domain;
+        await session.cookies.remove(`${scheme}://${domain}${c.path ?? "/"}`, c.name).catch(() => {});
+      }
+    } catch { /* no cookies to clear */ }
 
     const pollForToken = async () => {
       if (tokenExtracted || win.isDestroyed()) return;
@@ -78,6 +83,10 @@ export class AuthService extends EventEmitter {
       }).catch(() => []);
 
       if (cookies.length > 0 && cookies[0].value) {
+        if (this.isTokenExpired(cookies[0].value)) {
+          logService.warn("AuthService", "pollForToken: extracted token is expired, ignoring — waiting for fresh login");
+          return;
+        }
         tokenExtracted = true;
         this.cachedToken = cookies[0].value;
         logService.info("AuthService", `login-success we2_access_token len=${this.cachedToken.length} token=${maskToken(this.cachedToken)}`);
@@ -100,6 +109,10 @@ export class AuthService extends EventEmitter {
       }).catch(() => []);
 
       if (cookies2.length > 0 && cookies2[0].value) {
+        if (this.isTokenExpired(cookies2[0].value)) {
+          logService.warn("AuthService", "pollForToken: extracted token (no-dot) is expired, ignoring — waiting for fresh login");
+          return;
+        }
         tokenExtracted = true;
         this.cachedToken = cookies2[0].value;
         logService.info("AuthService", `login-success we2_access_token (no-dot) len=${this.cachedToken.length} token=${maskToken(this.cachedToken)}`);
