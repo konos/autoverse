@@ -65,7 +65,6 @@ export class AuthService extends EventEmitter {
         partition: "persist:weverse",
         nodeIntegration: false,
         contextIsolation: true,
-        offscreen: true,
       },
     });
     this.headlessWindow = win;
@@ -87,62 +86,157 @@ export class AuthService extends EventEmitter {
         });
       `);
 
-      // Fill email and password
-      await win.webContents.executeJavaScript(`
+      // Fill email and password using Chromium Input.insertText for real keystroke simulation
+      const emailInput = await win.webContents.executeJavaScript(`
         (function() {
-          const emailInput = document.querySelector('input[placeholder="your@email.com"]');
-          const pwInput = document.querySelector('input[type="password"]');
-          if (!emailInput || !pwInput) throw new Error("input fields not found");
-
-          function setReactValue(el, value) {
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-              window.HTMLInputElement.prototype, 'value'
-            ).set;
-            nativeInputValueSetter.call(el, value);
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-
-          setReactValue(emailInput, ${JSON.stringify(email)});
-          setReactValue(pwInput, ${JSON.stringify(password)});
+          const el = document.querySelector('input[placeholder="your@email.com"]');
+          if (!el) throw new Error("email input not found");
+          el.focus();
+          el.value = '';
+          return true;
         })();
       `);
+      if (emailInput) {
+        await win.webContents.insertText(email);
+      }
+      await new Promise(r => setTimeout(r, 200));
 
-      // Small delay for React state to update, then click login
-      await new Promise(r => setTimeout(r, 500));
+      const pwInput = await win.webContents.executeJavaScript(`
+        (function() {
+          const el = document.querySelector('input[type="password"]');
+          if (!el) throw new Error("password input not found");
+          el.focus();
+          el.value = '';
+          return true;
+        })();
+      `);
+      if (pwInput) {
+        await win.webContents.insertText(password);
+      }
+      await new Promise(r => setTimeout(r, 200));
+
+      // Verify values were actually set
+      const inputState = await win.webContents.executeJavaScript(`
+        (function() {
+          const emailEl = document.querySelector('input[placeholder="your@email.com"]');
+          const pwEl = document.querySelector('input[type="password"]');
+          return {
+            emailLen: emailEl?.value?.length ?? -1,
+            pwLen: pwEl?.value?.length ?? -1,
+          };
+        })();
+      `) as { emailLen: number; pwLen: number };
+      logService.info("AuthService", `credentialLogin(headless): input state — email=${inputState.emailLen} chars, pw=${inputState.pwLen} chars`);
+
+      // Wait for React state to update — poll until login button is enabled
+      const btnEnabled = await win.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          let tries = 0;
+          const check = () => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const loginBtn = btns.find(b => b.textContent.trim() === '로그인');
+            if (loginBtn && !loginBtn.disabled) { resolve(true); return; }
+            tries++;
+            if (tries > 30) { resolve(false); return; }
+            setTimeout(check, 200);
+          };
+          setTimeout(check, 300);
+        });
+      `) as boolean;
+
+      if (!btnEnabled) {
+        logService.warn("AuthService", "credentialLogin(headless): login button still disabled after input, dumping page state");
+        const debugInfo = await win.webContents.executeJavaScript(`
+          (function() {
+            const emailInput = document.querySelector('input[placeholder="your@email.com"]');
+            const pwInput = document.querySelector('input[type="password"]');
+            const btns = Array.from(document.querySelectorAll('button'));
+            const loginBtn = btns.find(b => b.textContent.trim() === '로그인');
+            return {
+              emailValue: emailInput?.value ?? 'NOT FOUND',
+              pwLength: pwInput?.value?.length ?? -1,
+              loginBtnFound: !!loginBtn,
+              loginBtnDisabled: loginBtn?.disabled ?? null,
+              url: location.href,
+            };
+          })();
+        `).catch(() => ({}));
+        logService.info("AuthService", `credentialLogin(headless): debug=${JSON.stringify(debugInfo)}`);
+        this.cleanupHeadless();
+        return { success: false, message: "로그인 버튼이 활성화되지 않았습니다. 이메일/비밀번호를 확인해주세요." };
+      }
 
       await win.webContents.executeJavaScript(`
         (function() {
           const btns = Array.from(document.querySelectorAll('button'));
           const loginBtn = btns.find(b => b.textContent.trim() === '로그인');
           if (!loginBtn) throw new Error("login button not found");
-          if (loginBtn.disabled) throw new Error("login button is disabled");
           loginBtn.click();
         })();
       `);
 
       logService.info("AuthService", "credentialLogin(headless): login button clicked, waiting for response");
 
-      // Wait for OTP input or redirect (token cookie)
-      const result = await win.webContents.executeJavaScript(`
-        new Promise((resolve) => {
-          const t = setTimeout(() => resolve("timeout"), 20000);
-          const check = () => {
-            // Check for OTP input
-            const otpInput = document.querySelector('input[placeholder="인증코드 6자리"]');
-            if (otpInput) { clearTimeout(t); resolve("otp"); return; }
-            // Check for error messages
-            const errorEl = document.querySelector('[class*="error"], [class*="Error"]');
-            if (errorEl && errorEl.textContent.trim()) {
-              // Only resolve error if it's not a transient state
-              const text = errorEl.textContent.trim();
-              if (text.length > 5) { clearTimeout(t); resolve("error:" + text); return; }
-            }
-            setTimeout(check, 300);
-          };
-          setTimeout(check, 1000);
-        });
-      `) as string;
+      // Wait for OTP input, redirect, token cookie, or error
+      const result = await new Promise<string>((resolve) => {
+        const timeout = setTimeout(() => resolve("timeout"), 25000);
+        let resolved = false;
+        const done = (val: string) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          clearInterval(pollTimer);
+          resolve(val);
+        };
+
+        // Poll DOM for OTP or error + check cookies
+        const pollTimer = setInterval(async () => {
+          if (resolved || win.isDestroyed()) return;
+          try {
+            // Check DOM state
+            const domState = await win.webContents.executeJavaScript(`
+              (function() {
+                const otpInput = document.querySelector('input[placeholder="인증코드 6자리"]');
+                if (otpInput) return 'otp';
+                const recaptcha = document.querySelector('.AuthLoginCredentialWidgetUi_recapcha_wrapper__oMA4m');
+                if (recaptcha) return 'otp';
+                // Check for error text inside text-field error wrappers (specific to Weverse login form)
+                const errWraps = document.querySelectorAll('.text-field_error_wrap__9nRXJ .text-field_error_text__BwsFg, [class*="error_message"]');
+                for (const el of errWraps) {
+                  const t = el.textContent.trim();
+                  if (t.length > 3) return 'error:' + t;
+                }
+                return null;
+              })();
+            `) as string | null;
+            if (domState) { done(domState); return; }
+
+            // Check cookies
+            const tokenFound = await this.extractTokenFromCookies();
+            if (tokenFound) { done("token"); return; }
+          } catch { /* window may be navigating */ }
+        }, 500);
+
+        // Also listen for navigation events
+        const onNav = async (_e: Electron.Event, url: string) => {
+          logService.info("AuthService", `credentialLogin(headless): navigated to ${url}`);
+          if (!url.includes("account.weverse.io/ko/login")) {
+            await new Promise(r => setTimeout(r, 1500));
+            const tokenFound = await this.extractTokenFromCookies();
+            if (tokenFound) done("token");
+          }
+        };
+        win.webContents.on("did-navigate", onNav);
+        win.webContents.on("did-navigate-in-page", onNav);
+      });
+
+      logService.info("AuthService", `credentialLogin(headless): result=${result}`);
+
+      if (result === "token") {
+        logService.info("AuthService", "credentialLogin(headless): token obtained directly");
+        this.cleanupHeadless();
+        return { success: true };
+      }
 
       if (result === "otp") {
         logService.info("AuthService", "credentialLogin(headless): OTP required");
@@ -151,12 +245,21 @@ export class AuthService extends EventEmitter {
       }
 
       if (result === "timeout") {
-        // Check if we got a token during the wait
         const token = await this.extractTokenFromCookies();
-        if (token) return { success: true };
+        if (token) {
+          this.cleanupHeadless();
+          return { success: true };
+        }
+
+        // Dump page state for debugging
+        const debugInfo = await win.webContents.executeJavaScript(`
+          (function() {
+            return { url: location.href, title: document.title, bodyLen: document.body?.innerHTML?.length ?? 0 };
+          })();
+        `).catch(() => ({}));
+        logService.error("AuthService", `credentialLogin(headless): timeout, debug=${JSON.stringify(debugInfo)}`);
 
         const msg = "로그인 응답 대기 시간 초과";
-        logService.error("AuthService", msg);
         this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
         this.cleanupHeadless();
         return { success: false, message: msg };
