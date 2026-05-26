@@ -10,6 +10,9 @@ const api: IpcApi = {
     submitOtp: (otpCode: string): Promise<CredentialLoginResult> =>
       ipcRenderer.invoke("auth:submit-otp", otpCode),
     validateToken: () => ipcRenderer.invoke("auth:validate-token"),
+    logout: (clearCredentials?: boolean) =>
+      ipcRenderer.invoke("auth:logout", clearCredentials),
+    tryAutoLogin: () => ipcRenderer.invoke("auth:auto-login"),
   },
   profile: {
     save: (profile: Profile) => ipcRenderer.invoke("profile:save", profile),

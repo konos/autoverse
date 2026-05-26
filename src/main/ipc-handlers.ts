@@ -60,6 +60,16 @@ export function registerIpcHandlers(): void {
     authService.validateToken()
   );
 
+  // auth:logout — clear token, optionally clear saved credentials
+  ipcMain.handle("auth:logout", async (_evt, clearCredentials?: boolean) =>
+    authService.logout(clearCredentials ?? false)
+  );
+
+  // auth:auto-login — attempt login with stored credentials
+  ipcMain.handle("auth:auto-login", async () =>
+    authService.tryAutoLogin()
+  );
+
   // profile:save — encrypt via safeStorage, persist to disk
   ipcMain.handle("profile:save", async (_evt, profile: Profile) => {
     profileStore.saveProfile(profile);
@@ -127,6 +137,8 @@ export function unregisterIpcHandlers(): void {
   ipcMain.removeHandler("auth:credential-login");
   ipcMain.removeHandler("auth:submit-otp");
   ipcMain.removeHandler("auth:validate-token");
+  ipcMain.removeHandler("auth:logout");
+  ipcMain.removeHandler("auth:auto-login");
   ipcMain.removeHandler("profile:save");
   ipcMain.removeHandler("profile:get");
   ipcMain.removeHandler("profile:clear");

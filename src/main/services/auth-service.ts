@@ -1,5 +1,7 @@
 import { EventEmitter } from "events";
-import { BrowserWindow, session } from "electron";
+import { BrowserWindow, session, safeStorage, app } from "electron";
+import * as fs from "fs";
+import * as path from "path";
 import { maskToken } from "../../shared/mask";
 import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/types";
 import { logService } from "./log-service";
@@ -11,18 +13,31 @@ const VALIDATE_TIMEOUT_MS = 5_000;
 const LOGIN_URL =
   "https://account.weverse.io/ko/login/credential?client_id=weverse&v=4";
 
+const CREDENTIALS_FILENAME = "credentials.enc";
+
+function getCredentialsPath(): string {
+  return path.join(app.getPath("userData"), CREDENTIALS_FILENAME);
+}
+
 export interface FansMe {
   fanId: number;
   [key: string]: unknown;
+}
+
+interface StoredCredentials {
+  email: string;
+  password: string;
 }
 
 export class AuthService extends EventEmitter {
   private cachedToken: string | null = null;
   private cachedFanId: number | undefined = undefined;
   private loginWindow: BrowserWindow | null = null;
+  private autoReloginInProgress = false;
 
   // Headless login state
   private headlessWindow: BrowserWindow | null = null;
+  private pendingCredentials: { email: string; password: string } | null = null;
 
   get token(): string | null {
     return this.cachedToken;
@@ -34,7 +49,133 @@ export class AuthService extends EventEmitter {
       isLoggedIn: true,
       fanId: this.cachedFanId,
       tokenPreview: maskToken(this.cachedToken),
+      hasStoredCredentials: this.hasStoredCredentials(),
     };
+  }
+
+  // ── Credential storage (safeStorage encrypted) ──────────────────────────
+
+  private saveCredentials(email: string, password: string): void {
+    if (!safeStorage.isEncryptionAvailable()) {
+      logService.warn("AuthService", "safeStorage 사용 불가 — 자격 증명 저장 건너뜀");
+      return;
+    }
+    const json = JSON.stringify({ email, password } satisfies StoredCredentials);
+    const encrypted = safeStorage.encryptString(json);
+    fs.writeFileSync(getCredentialsPath(), encrypted);
+    logService.info("AuthService", `credentials saved for ${email.slice(0, 3)}***`);
+  }
+
+  private loadCredentials(): StoredCredentials | null {
+    const filePath = getCredentialsPath();
+    if (!fs.existsSync(filePath)) return null;
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    try {
+      const buffer = fs.readFileSync(filePath);
+      const json = safeStorage.decryptString(buffer);
+      return JSON.parse(json) as StoredCredentials;
+    } catch (err) {
+      logService.error("AuthService", `credentials 로드 실패: ${String(err)}`);
+      this.clearCredentials();
+      return null;
+    }
+  }
+
+  clearCredentials(): void {
+    const filePath = getCredentialsPath();
+    if (fs.existsSync(filePath)) {
+      try { fs.unlinkSync(filePath); } catch { /* ok */ }
+      logService.info("AuthService", "credentials cleared");
+    }
+  }
+
+  hasStoredCredentials(): boolean {
+    return fs.existsSync(getCredentialsPath());
+  }
+
+  // ── Logout ──────────────────────────────────────────────────────────────
+
+  async logout(clearCredentials = false): Promise<void> {
+    this.cachedToken = null;
+    this.cachedFanId = undefined;
+    this.cleanupHeadless();
+
+    // Clear cookies from the weverse session partition
+    const ses = session.fromPartition("persist:weverse");
+    try {
+      const cookies = await ses.cookies.get({ name: "we2_access_token" });
+      for (const c of cookies) {
+        const scheme = c.secure ? "https" : "http";
+        const domain = c.domain?.startsWith(".") ? c.domain.slice(1) : c.domain;
+        await ses.cookies.remove(`${scheme}://${domain}${c.path ?? "/"}`, c.name).catch(() => {});
+      }
+    } catch { /* ok */ }
+
+    if (clearCredentials) {
+      this.clearCredentials();
+    }
+
+    logService.info("AuthService", `logout: clearCredentials=${clearCredentials}`);
+    this._emit({ type: "logged-out", message: "로그아웃 완료", timestamp: Date.now() });
+  }
+
+  // ── Auto-login on app start ─────────────────────────────────────────────
+
+  async tryAutoLogin(): Promise<boolean> {
+    // First check if existing token in cookies is still valid
+    const tokenFound = await this.extractTokenFromCookies();
+    if (tokenFound) {
+      logService.info("AuthService", "tryAutoLogin: existing cookie token found");
+      return true;
+    }
+
+    const creds = this.loadCredentials();
+    if (!creds) {
+      logService.info("AuthService", "tryAutoLogin: no stored credentials");
+      return false;
+    }
+
+    logService.info("AuthService", `tryAutoLogin: attempting login for ${creds.email.slice(0, 3)}***`);
+    this._emit({ type: "credential-login-progress", message: "자동 로그인 시도 중...", timestamp: Date.now() });
+
+    const result = await this.credentialLogin(creds.email, creds.password);
+    if (result.success) {
+      logService.info("AuthService", "tryAutoLogin: success");
+      return true;
+    }
+
+    if (result.needOtp) {
+      logService.info("AuthService", "tryAutoLogin: OTP required — user intervention needed");
+      return false;
+    }
+
+    logService.warn("AuthService", `tryAutoLogin: failed — ${result.message}`);
+    return false;
+  }
+
+  // ── Auto re-login on token expiry ───────────────────────────────────────
+
+  private async tryAutoRelogin(): Promise<boolean> {
+    if (this.autoReloginInProgress) return false;
+
+    const creds = this.loadCredentials();
+    if (!creds) return false;
+
+    this.autoReloginInProgress = true;
+    logService.info("AuthService", "tryAutoRelogin: token expired, attempting re-login");
+    this._emit({ type: "credential-login-progress", message: "토큰 만료 — 자동 재로그인 중...", timestamp: Date.now() });
+
+    try {
+      const result = await this.credentialLogin(creds.email, creds.password);
+      if (result.success) {
+        logService.info("AuthService", "tryAutoRelogin: success");
+        return true;
+      }
+      logService.warn("AuthService", `tryAutoRelogin: failed — ${result.message}`);
+      return false;
+    } finally {
+      this.autoReloginInProgress = false;
+    }
   }
 
   /**
@@ -45,6 +186,7 @@ export class AuthService extends EventEmitter {
     logService.info("AuthService", "credentialLogin(headless): starting");
     this._emit({ type: "credential-login-progress", message: "로그인 시도 중...", timestamp: Date.now() });
 
+    this.pendingCredentials = { email, password };
     this.cleanupHeadless();
 
     const ses = session.fromPartition("persist:weverse");
@@ -234,6 +376,7 @@ export class AuthService extends EventEmitter {
 
       if (result === "token") {
         logService.info("AuthService", "credentialLogin(headless): token obtained directly");
+        this.saveCredentials(email, password);
         this.cleanupHeadless();
         return { success: true };
       }
@@ -331,6 +474,10 @@ export class AuthService extends EventEmitter {
       // Wait for redirect/token or error
       const token = await this.waitForTokenAfterOtp(win);
       if (token) {
+        if (this.pendingCredentials) {
+          this.saveCredentials(this.pendingCredentials.email, this.pendingCredentials.password);
+          this.pendingCredentials = null;
+        }
         this.cleanupHeadless();
         return { success: true };
       }
@@ -542,14 +689,20 @@ export class AuthService extends EventEmitter {
 
     const localExpired = this.isTokenExpired(this.cachedToken);
     if (localExpired) {
-      logService.warn("AuthService", "JWT exp is in the past — skipping server call, token is expired");
+      logService.warn("AuthService", "JWT exp is in the past — attempting auto re-login");
+      this.cachedToken = null;
+      this.cachedFanId = undefined;
+
+      const reloginOk = await this.tryAutoRelogin();
+      if (reloginOk) {
+        return this.getStatus();
+      }
+
       this._emit({
         type: "token-expired",
         message: "JWT 만료 — 다시 로그인해주세요",
         timestamp: Date.now(),
       });
-      this.cachedToken = null;
-      this.cachedFanId = undefined;
       return { isLoggedIn: false };
     }
 
@@ -603,13 +756,20 @@ export class AuthService extends EventEmitter {
     logService.info("AuthService", `validateToken body: ${rawBody.slice(0, 500)}`);
 
     if (res.status === 401) {
+      logService.warn("AuthService", "validateToken: 401 — attempting auto re-login");
+      this.cachedToken = null;
+      this.cachedFanId = undefined;
+
+      const reloginOk = await this.tryAutoRelogin();
+      if (reloginOk) {
+        return this.getStatus();
+      }
+
       this._emit({
         type: "token-expired",
         message: `401 응답 — ${rawBody.slice(0, 200)}`,
         timestamp: Date.now(),
       });
-      this.cachedToken = null;
-      this.cachedFanId = undefined;
       return { isLoggedIn: false };
     }
 

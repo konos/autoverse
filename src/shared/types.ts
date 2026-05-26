@@ -230,6 +230,7 @@ export interface AuthStatus {
   isLoggedIn: boolean;
   fanId?: number;
   tokenPreview?: string; // "first20...last20" — never full token
+  hasStoredCredentials?: boolean;
 }
 
 export interface Profile {
@@ -247,7 +248,8 @@ export interface AuthEvent {
     | "token-validated"
     | "cookie-extraction-failed"
     | "otp-required"
-    | "credential-login-progress";
+    | "credential-login-progress"
+    | "logged-out";
   message?: string;
   timestamp: number;
 }
@@ -265,6 +267,8 @@ export interface IpcApi {
     credentialLogin: (email: string, password: string) => Promise<CredentialLoginResult>;
     submitOtp: (otpCode: string) => Promise<CredentialLoginResult>;
     validateToken: () => Promise<AuthStatus>;
+    logout: (clearCredentials?: boolean) => Promise<void>;
+    tryAutoLogin: () => Promise<boolean>;
   };
   profile: {
     save: (profile: Profile) => Promise<void>;

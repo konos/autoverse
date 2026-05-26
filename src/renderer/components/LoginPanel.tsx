@@ -6,6 +6,8 @@ interface LoginPanelProps {
   loading: boolean;
   error: string | null;
   onLogin: () => void;
+  onLogout: (clearCredentials: boolean) => void;
+  onValidateToken: () => void;
 }
 
 type LoginState = "idle" | "logging-in" | "logged-in" | "expired";
@@ -31,7 +33,7 @@ const STATE_COLORS: Record<LoginState, string> = {
   expired: "var(--color-error)",
 };
 
-export default function LoginPanel({ status, loading, error, onLogin }: LoginPanelProps) {
+export default function LoginPanel({ status, loading, error, onLogin, onLogout, onValidateToken }: LoginPanelProps) {
   const loginState = getLoginState(status, loading);
   const [mode, setMode] = useState<LoginMode>("credential");
   const [email, setEmail] = useState("");
@@ -118,6 +120,37 @@ export default function LoginPanel({ status, loading, error, onLogin }: LoginPan
         <p className="error-message" role="alert">
           {error}
         </p>
+      )}
+
+      {status.isLoggedIn && (
+        <div className="button-row" style={{ gap: "0.5rem" }}>
+          <button
+            className="btn btn-secondary"
+            onClick={onValidateToken}
+            disabled={loading}
+            style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
+          >
+            토큰 검증
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => onLogout(false)}
+            disabled={loading}
+            style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
+          >
+            로그아웃
+          </button>
+          {status.hasStoredCredentials && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => onLogout(true)}
+              disabled={loading}
+              style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem", color: "var(--color-error)" }}
+            >
+              로그아웃 + 자격 증명 삭제
+            </button>
+          )}
+        </div>
       )}
 
       {!status.isLoggedIn && (

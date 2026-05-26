@@ -48,6 +48,11 @@ export default function App() {
         setAuthStatus({ isLoggedIn: false });
         setLoginError(event.message ?? "쿠키 추출에 실패했습니다.");
         setStep("login");
+      } else if (event.type === "logged-out") {
+        setAuthStatus({ isLoggedIn: false });
+        setLoginError(null);
+        setStep("login");
+        setFormSchema(null);
       }
     });
 
@@ -61,6 +66,37 @@ export default function App() {
       await window.api.auth.openLogin();
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : "로그인 요청 중 오류가 발생했습니다.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async (clearCredentials: boolean) => {
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      await window.api.auth.logout(clearCredentials);
+      setAuthStatus({ isLoggedIn: false });
+      setStep("login");
+      setFormSchema(null);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "로그아웃 중 오류가 발생했습니다.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleValidateToken = async () => {
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      const s = await window.api.auth.validateToken();
+      setAuthStatus(s);
+      if (!s.isLoggedIn) {
+        setStep("login");
+      }
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "토큰 검증 중 오류가 발생했습니다.");
     } finally {
       setLoginLoading(false);
     }
@@ -93,6 +129,8 @@ export default function App() {
         loading={loginLoading}
         error={loginError}
         onLogin={handleLogin}
+        onLogout={handleLogout}
+        onValidateToken={handleValidateToken}
       />
 
       {step === "profile" && authStatus.isLoggedIn && authStatus.fanId !== undefined && (

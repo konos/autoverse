@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from "electron";
 import * as path from "path";
 import { registerIpcHandlers, setMainWindow } from "./ipc-handlers";
+import { authService } from "./services/auth-service";
+import { logService } from "./services/log-service";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -35,9 +37,21 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
+
+  // Auto-login with stored credentials on app start
+  try {
+    const ok = await authService.tryAutoLogin();
+    if (ok) {
+      logService.info("Main", "auto-login succeeded on startup");
+    } else {
+      logService.info("Main", "auto-login skipped or failed — manual login required");
+    }
+  } catch (err) {
+    logService.error("Main", `auto-login error: ${String(err)}`);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
