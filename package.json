@@ -1,6 +1,6 @@
 {
   "name": "weverse-fanevent-apply",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Weverse Fanevent Application Tool",
   "main": "dist/main/main/main.js",
   "scripts": {
