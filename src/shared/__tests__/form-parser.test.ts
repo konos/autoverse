@@ -5,9 +5,9 @@ import type { FormSchema } from "../types";
 // ── Fixture ───────────────────────────────────────────────────────────────────
 
 const baseSchema: FormSchema = {
-  eventPublicId: "66195918a9c0",
-  artistName: "NCT WISH",
-  artistCode: "NCTWISH",
+  eventPublicId: "aabbccddee00",
+  artistName: "TEST ARTIST",
+  artistCode: "TESTART",
   officialMembershipResponse: [],
   languages: ["ko"],
   primaryLanguage: "ko",
