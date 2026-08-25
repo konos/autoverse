@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 05
 current_phase_name: API 로그인 핵심 흐름 + 토큰 교환 검증
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-08-25T09:18:19.982Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-08-25T09:26:55.472Z"
 last_activity: 2026-08-25
 last_activity_desc: Phase 05 execution started
-state_head: acbe290548278befb1828ae461926f42facfd64a
+state_head: 42a5243e2e2148500abbd948c46dad183adb3581
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 ## Current Position
 
 Phase: 05 (API 로그인 핵심 흐름 + 토큰 교환 검증) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-08-25 — Phase 05 execution started
 
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 05-api P01 | ~35min | 3 tasks | 6 files |
+| Phase 05-api P02 | 20 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Recent decisions affecting current work:
 - v0.3.0: API 모드 토큰 만료는 자동 재로그인 대신 사전 경고로 대응 (Phase 07)
 - v0.3.0: 로그인 API를 리버싱해 직접 호출 — 계약은 2026-08-25 실서버 프로브로 검증됨, Phase 05에서 실계정 토큰 교환까지 검증 예정
 - [Phase 05]: R019 사다리 검증 스파이크 배선 완료 — 쿠키 우선 + CDP 폴백으로 account 토큰 확보해 acquireFaneventToken()에 공급, verdict 로그로 관측 가능. 실계정 판정은 05-03 체크포인트로 이관
+- [Phase 05]: R018 삭제 대신 blocked+매핑해제로 기록 (D-05) — HAR 상 OTP 단계 부재, 05-01-SUMMARY.md 근거
+- [Phase 05]: R017 항목 본문에서 반증된 옛 엔드포인트 이름 언급을 배제, 반증 서술은 R018 Notes로 분리
+- [Phase 05]: ROADMAP Phase 05 Success Criteria 1·2를 삭제 대신 [VOID] 마킹으로 보존 — 학습 자산 기록 원칙
 
 ### Pending Todos
 
@@ -99,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-25T09:18:19.971Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-08-25T09:26:55.461Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
