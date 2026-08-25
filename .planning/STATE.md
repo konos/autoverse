@@ -2,13 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
-status: planning
-last_updated: "2026-08-25T00:00:00.000Z"
+current_phase: 05
+current_phase_name: API 로그인 핵심 흐름 + 토큰 교환 검증
+status: blocked
+stopped_at: "Phase 05 halted at 05-01 Task 3 — HAR 증거로 by-credentials 의 otpSessionId 가 reCAPTCHA 토큰 필드임이 확인되어 3단계 로그인 전제가 무효화됨. 재설계 필요."
+last_updated: "2026-08-25T07:07:48.941Z"
 last_activity: 2026-08-25
+last_activity_desc: "Phase 05 halted — API 계약 전제 무효화, 재설계 대기"
+state_head: cc34d41cea11d95651b1708cb4dc9d8a262e21b6
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -24,16 +29,23 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 ## Current Position
 
-Phase: 05 of 07 (API 로그인 핵심 흐름 + 토큰 교환 검증)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-08-25 — ROADMAP.md 작성 완료, R016–R023 전부 Phase 05/06/07에 매핑
+Phase: 05 (API 로그인 핵심 흐름 + 토큰 교환 검증) — HALTED
+Plan: 05-01 halted (2/3 tasks), 05-02 blocked by 05-01
+Status: Blocked — 재설계 필요 (PROJECT.md 의 "검증된 3단계 로그인 계약"이 HAR 증거로 반증됨)
+Last activity: 2026-08-25 — 05-01 halt, 05-01-SUMMARY.md 에 정정된 실제 API 계약 기록
+
+**Halt 사유:** `POST /v4/auth/token/by-credentials` 의 `otpSessionId` 필드는 OTP 세션 ID 가
+아니라 reCAPTCHA Enterprise 토큰(2489자)을 담는 필드다. 실제 브라우저 로그인은
+`/v2/auth/otp-sessions` 를 호출하지 않으며 OTP 단계 자체가 없다. `-25044` 는 "OTP 필요"가
+아니라 "캡차 토큰 없음/무효"를 뜻한다. R017/R018/R019 와 05-02 전체가 이 전제 위에 있어
+재설계 없이는 진행 불가. 근거: `.planning/phases/05-api/05-01-SUMMARY.md`
 
 Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0 (v0.3.0 기준)
 - Average duration: —
 - Total execution time: —
@@ -46,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | 05-07 (v0.3.0) | 0 | 0 | — |
 
 **Recent Trend:**
+
 - Last 5 plans: —
 - Trend: —
 
