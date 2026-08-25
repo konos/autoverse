@@ -191,6 +191,52 @@ describe("maskSensitive", () => {
     expect(maskSensitive(text)).toBe(text);
   });
 
+  // ── T-05-17 회귀: snake_case URL 쿼리 파라미터 ──────────────────────────
+  // Phase 05 보안 감사에서 실증된 유출 경로. camelCase 규칙만 있던 시절
+  // 아래 입력들은 maskSensitive 를 통과해도 바이트 단위로 동일하게 나왔다.
+
+  it("T-05-17: 리다이렉트 URL 의 access_token= / refresh_token= 을 마스킹한다", () => {
+    const access = "eyJ" + "a".repeat(60);
+    const refresh = "eyJ" + "b".repeat(60);
+    const text = `credentialLogin(headless): navigated to https://weverse.io/loginResult?access_token=${access}&refresh_token=${refresh}&service_user_id=abc123`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(access);
+    expect(result).not.toContain(refresh);
+    expect(result).not.toContain("abc123");
+    // 키 이름과 URL 구조는 보존되어야 진단 가치가 남는다
+    expect(result).toContain("access_token=");
+    expect(result).toContain("refresh_token=");
+    expect(result).toContain("https://weverse.io/loginResult?");
+  });
+
+  it("T-05-17: & 로 구분된 다음 파라미터를 삼키지 않는다", () => {
+    const long = "e".repeat(60);
+    const text = `?access_token=${long}&state=keepme`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(long);
+    expect(result).toContain("&state=keepme");
+  });
+
+  it("T-05-17: # 프래그먼트 경계에서 값이 끝난다", () => {
+    const long = "f".repeat(60);
+    const text = `?access_token=${long}#section`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(long);
+    expect(result).toContain("#section");
+  });
+
+  it("T-05-17: 쿠키 이름 we2_access_token= 형태도 마스킹된다", () => {
+    const long = "g".repeat(60);
+    const text = `we2_access_token=${long}`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(long);
+  });
+
+  it("T-05-17: 진단 로그(access_token_len=)는 훼손되지 않는다", () => {
+    const text = "capture: access_token_len=64 refresh_token_len=88 looksLikeJwt=true";
+    expect(maskSensitive(text)).toBe(text);
+  });
+
   it("masks otpCode value", () => {
     const text = '{"otpCode":"123456"}';
     const result = maskSensitive(text);

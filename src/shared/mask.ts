@@ -50,6 +50,14 @@ const SENSITIVE_PATTERNS: Array<[RegExp, (match: string, key: string, val: strin
   [/(accessToken["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
   [/(refreshToken["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
   [/(otpSessionId["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
+  // T-05-17 (Phase 05 보안 감사) — snake_case URL 쿼리 파라미터 룰.
+  // 위 규칙들은 camelCase JSON 키(`accessToken":"…`) 형태만 매칭하므로,
+  // OAuth 리다이렉트 URL 이 `?access_token=eyJ…&refresh_token=eyJ…` 형태로
+  // 로그에 실릴 때(`auth-service.ts` 의 did-navigate / submitOtp 로그 라인)
+  // 토큰이 평문으로 통과했다. 값 종결자에 `&`/`#` 를 포함해야 쿼리 문자열의
+  // 다음 파라미터까지 삼키지 않는다. 키 뒤에 곧바로 `=` 가 오는 경우만
+  // 매칭되므로 `access_token_len=64` 같은 진단 로그는 훼손되지 않는다.
+  [/((?:access_token|refresh_token|service_user_id)=)([^&#\s"',}]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
   [/(phoneNumber["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskPhone(v)}`],
   [/(birthDate["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskBirthDate(v)}`],
   [/(membershipNumber["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskMembershipNumber(v)}`],
