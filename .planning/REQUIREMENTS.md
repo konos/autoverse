@@ -159,8 +159,8 @@ This file is the explicit capability and coverage contract for the project.
 - Why it matters: 이 교환이 없으면 API 로그인에 성공해도 신청을 못 한다. 두 로그인 경로가 같은 다운스트림 인터페이스로 수렴해야 ApplyEngine을 건드리지 않는다.
 - Source: 아키텍처 요구
 - Primary owning slice: v0.3.0/Phase 05
-- Validation: unmapped
-- Notes: **미검증 리스크** — 실계정 로그인 없이는 교환 경로를 확인할 수 없었다. Phase 05를 마일스톤 첫 phase로 배치해 조기 스파이크로 검증한다. 실패 시 0.5~1일 추가 예상.
+- Validation: validated
+- Notes: **2026-08-25 실계정 관측으로 검증됨(PASS)** — 근거: `.planning/phases/05-api/05-SPIKE-RESULT.md`. `acquireFaneventToken()` 사다리의 rung1(직접 사용)이 실계정 쿠키(계정 도메인 `rt` 쿠키, JWT 형태)로 `/fans/me` 200 + fanId를 확보했다. rung2(교환)는 rung1 성공으로 실행 기회가 없어 여전히 미검증 — API 모드 제품 경로 확정 전에 감안할 것(05-SPIKE-RESULT.md §6 "다음 단계" 참고). 별도로, 이 관측 과정에서 앱 로그 파일에 access_token/refresh_token 원문이 마스킹 없이 남는 보안 결함이 발견됐다(05-SPIKE-RESULT.md §6) — 코드 변경은 이 phase 스코프 밖이라 Phase 06/07로 이관.
 
 ### R020 — API 로그인 실패 사유 한국어 안내
 
@@ -277,7 +277,7 @@ This file is the explicit capability and coverage contract for the project.
 | R016 | core-capability | active | v0.3.0/Phase 06 | none | unmapped |
 | R017 | core-capability | active | v0.3.0/Phase 05 | none | 2026-08-25 HAR 실측으로 로그인 계약 정정 — otpSessionId=reCAPTCHA 토큰, 3단계 순서 아님 (근거: 05-01-SUMMARY.md) |
 | R018 | core-capability | blocked | none | none | 2026-08-25 Phase 05 매핑 해제 — HAR 상 OTP 단계 부재, 미입증 |
-| R019 | core-capability | active | v0.3.0/Phase 05 | none | unmapped |
+| R019 | core-capability | validated | v0.3.0/Phase 05 | none | 2026-08-25 실계정 관측: rung1(직접 사용)이 계정 도메인 쿠키(JWT)로 /fans/me 200+fanId 확보 (근거: 05-SPIKE-RESULT.md). rung2(교환)는 미실행으로 여전히 미검증 |
 | R020 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
 | R021 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
 | R022 | safety-guard | active | v0.3.0/Phase 07 | none | unmapped |
@@ -285,8 +285,8 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 10 (기존 3 + v0.3.0 신규 7 — R018 은 blocked 로 이동해 제외)
-- Mapped to slices: 10 (활성 요구사항 전체가 phase에 매핑 완료 — v0.3.0: R016/R020/R021 → Phase 06, R017/R019 → Phase 05, R018 → blocked/unmapped, R022/R023 → Phase 07)
+- Active requirements: 9 (기존 3 + v0.3.0 신규 6 — R018 은 blocked 로 이동해 제외, R019 는 validated 로 이동해 제외)
+- Mapped to slices: 10 (활성+validated 요구사항 전체가 phase에 매핑 완료 — v0.3.0: R016/R020/R021 → Phase 06, R017 → Phase 05, R019 → Phase 05(validated), R018 → blocked/unmapped, R022/R023 → Phase 07)
 - Blocked: 1 (R018 — 2026-08-25 Phase 05 매핑 해제, HAR 상 OTP 단계 부재로 미입증)
-- Validated: 7 (R001, R002, R003, R004, R005, R007, R009)
+- Validated: 8 (R001, R002, R003, R004, R005, R007, R009, R019 — R019 는 2026-08-25 실계정 관측으로 validated, 05-SPIKE-RESULT.md 근거)
 - Unmapped active requirements: 0
