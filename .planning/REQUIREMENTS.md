@@ -129,27 +129,27 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: unmapped
 - Notes: 브라우저 모드가 기본값. 선택값은 설정에 영속 저장.
 
-### R017 — API 3단계 자격증명 로그인
+### R017 — API 자격증명 로그인 (실측 계약)
 
 - Class: core-capability
 - Status: active
-- Description: 이메일/비밀번호로 위버스 계정 API에 직접 로그인한다. POST /v2/auth/otp-sessions → POST /v4/auth/token/by-credentials.
+- Description: 이메일/비밀번호로 위버스 계정 API에 로그인하는 경로는 POST /v4/auth/token/by-credentials **단독 호출**이며, 요청 바디의 otpSessionId 필드는 OTP 세션 식별자가 아니라 reCAPTCHA Enterprise 토큰(실측 2489자)이다.
 - Why it matters: 브라우저 엔진 없이 순수 HTTP로 인증하는 경로의 핵심.
 - Source: client
 - Primary owning slice: v0.3.0/Phase 05
 - Validation: unmapped
-- Notes: Base URL https://accountapi.weverse.io/web/api. 필수 헤더 X-ACC-APP-VERSION(4.7.1), X-ACC-APP-SECRET, X-ACC-SERVICE-ID(weverse), X-ACC-LANGUAGE, X-ACC-TRACE-ID. otpSessionId는 필수 필드 — 누락 시 -26000. 비밀번호는 평문 전송(TLS), 클라이언트 암호화 없음. 2026-08-25 실서버 프로브로 계약 검증됨.
+- Notes: Base URL https://accountapi.weverse.io/web/api. 필수 헤더 X-ACC-APP-VERSION(4.7.1), X-ACC-APP-SECRET, X-ACC-SERVICE-ID(weverse), X-ACC-LANGUAGE, X-ACC-TRACE-ID. otpSessionId 필드는 캡차 토큰 자리이므로 순수 HTTP 클라이언트는 채울 수 없고(R013 영구 제외), 실제 로그인 페이지가 캡차를 스스로 처리하는 헤드리스 BrowserWindow 경로가 현재 유일하게 동작하는 로그인 경로다. -25044는 "이메일 OTP 인증 필요"가 아니라 캡차 토큰 없음/무효를 의미한다. 비밀번호는 평문 전송(TLS), 클라이언트 암호화 없음. 2026-08-25 HAR(436 entries) 실측으로 정정됨 — 근거: .planning/phases/05-api/05-01-SUMMARY.md
 
-### R018 — 이메일 OTP 코드 입력 및 인증
+### R018 — 이메일 OTP 코드 입력 및 인증 [보류 — 2026-08-25]
 
 - Class: core-capability
-- Status: active
+- Status: blocked
 - Description: API 모드 로그인 시 이메일로 발송된 6자리 OTP를 앱에서 입력해 인증을 완료한다. POST /v2/auth/otp로 발송, POST /v3/auth/token/by-credentials-with-otp로 검증.
-- Why it matters: 캡차 토큰 없는 순수 HTTP 로그인은 서버가 OTP를 강제한다(-25044 실측 확인). API 모드에서 우회 불가능한 필수 단계.
+- Why it matters: HAR 실측상 실제 로그인 흐름에는 이메일 OTP 단계가 없다(관련 호출 0건) — 캡차 실패 시의 폴백 경로로만 존재할 가능성이 남아 있으나 미입증이다. -25044는 OTP 요구가 아니라 캡차 토큰 없음/무효 신호였다.
 - Source: 실서버 검증
-- Primary owning slice: v0.3.0/Phase 05
+- Primary owning slice: none (unmapped — 2026-08-25 Phase 05 매핑 해제)
 - Validation: unmapped
-- Notes: OTP 코드는 절대 저장하지 않는다. 재발송 및 만료(expiresIn) 처리 포함.
+- Notes: HAR 상 실제 로그인 흐름에 OTP 단계가 존재하지 않는다(`/v2/auth/otp-sessions`, `/v3/auth/token/by-credentials-with-otp`, `/v2/auth/otp` 호출 0건). 캡차 실패 시의 폴백 경로로만 존재할 가능성이 남아 있으나 05-01 실계정 스파이크에서 OTP 메일이 오지 않아 미입증. OTP 코드는(만약 경로가 실재로 확인되면) 절대 저장하지 않는다. 근거: .planning/phases/05-api/05-01-SUMMARY.md
 
 ### R019 — account 토큰 → 팬이벤트 토큰 교환
 
@@ -275,8 +275,8 @@ This file is the explicit capability and coverage contract for the project.
 | R014 | constraint | out-of-scope | none | none | unmapped |
 | R015 | constraint | out-of-scope | none | none | unmapped |
 | R016 | core-capability | active | v0.3.0/Phase 06 | none | unmapped |
-| R017 | core-capability | active | v0.3.0/Phase 05 | none | unmapped |
-| R018 | core-capability | active | v0.3.0/Phase 05 | none | unmapped |
+| R017 | core-capability | active | v0.3.0/Phase 05 | none | 2026-08-25 HAR 실측으로 로그인 계약 정정 — otpSessionId=reCAPTCHA 토큰, 3단계 순서 아님 (근거: 05-01-SUMMARY.md) |
+| R018 | core-capability | blocked | none | none | 2026-08-25 Phase 05 매핑 해제 — HAR 상 OTP 단계 부재, 미입증 |
 | R019 | core-capability | active | v0.3.0/Phase 05 | none | unmapped |
 | R020 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
 | R021 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
@@ -285,7 +285,8 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 11 (기존 3 + v0.3.0 신규 8)
-- Mapped to slices: 11 (전체 활성 요구사항이 phase에 매핑 완료 — v0.3.0: R016/R020/R021 → Phase 06, R017/R018/R019 → Phase 05, R022/R023 → Phase 07)
+- Active requirements: 10 (기존 3 + v0.3.0 신규 7 — R018 은 blocked 로 이동해 제외)
+- Mapped to slices: 10 (활성 요구사항 전체가 phase에 매핑 완료 — v0.3.0: R016/R020/R021 → Phase 06, R017/R019 → Phase 05, R018 → blocked/unmapped, R022/R023 → Phase 07)
+- Blocked: 1 (R018 — 2026-08-25 Phase 05 매핑 해제, HAR 상 OTP 단계 부재로 미입증)
 - Validated: 7 (R001, R002, R003, R004, R005, R007, R009)
 - Unmapped active requirements: 0
