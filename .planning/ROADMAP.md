@@ -35,7 +35,9 @@
   1. 사용자가 API 모드에서 이메일/비밀번호를 제출하면 매번 이메일로 6자리 OTP가 발송된다 (POST /v2/auth/otp-sessions → POST /v4/auth/token/by-credentials, otpSessionId 포함).
   2. 사용자가 발송된 OTP를 입력하면 POST /v3/auth/token/by-credentials-with-otp 검증을 거쳐 API 로그인이 완료된다.
   3. 로그인 완료 시 확보한 account 토큰이 실계정으로 we2_access_token 교환까지 검증되며(마일스톤 핵심 리스크 조기 해소), ApplyEngine이 이 토큰을 코드 변경 없이 그대로 사용해 신청을 수행할 수 있다.
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 05-01-PLAN.md — [wave 1] 트레이서: 이메일→OTP→팬이벤트 토큰 사다리 종단 배선 + 마스킹 방어선 + R019 실계정 스파이크(checkpoint)
+- [ ] 05-02-PLAN.md — [wave 2] 확장: OTP 재발송·만료 처리, 에러 코드 무손실 전파, AuthService 단위 테스트 + ApplyEngine 무변경 게이트
 
 ### Phase 06: 로그인 방식 선택 UI + 실패 안내
 **Goal**: 사용자가 로그인 방식(API 통신/브라우저)을 명시적으로 선택하고, 선택 시 제약을 사전 고지받으며, 로그인 실패 시 원인을 한국어로 이해할 수 있다.
@@ -68,6 +70,6 @@ Phases execute in numeric order: 05 → 06 → 07
 | 02. s02 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 03. s03 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 04. s04 | M001-ksbtje | - | Complete | 2026-05-13 |
-| 05. API 로그인 핵심 흐름 + 토큰 교환 검증 | v0.3.0 | 0/TBD | Not started | - |
+| 05. API 로그인 핵심 흐름 + 토큰 교환 검증 | v0.3.0 | 0/2 | Not started | - |
 | 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 0/TBD | Not started | - |
 | 07. API 자격 증명 저장 + 토큰 만료 사전 경고 | v0.3.0 | 0/TBD | Not started | - |
