@@ -35,18 +35,21 @@
   1. 사용자가 API 모드에서 이메일/비밀번호를 제출하면 매번 이메일로 6자리 OTP가 발송된다 (POST /v2/auth/otp-sessions → POST /v4/auth/token/by-credentials, otpSessionId 포함).
   2. 사용자가 발송된 OTP를 입력하면 POST /v3/auth/token/by-credentials-with-otp 검증을 거쳐 API 로그인이 완료된다.
   3. 로그인 완료 시 확보한 account 토큰이 실계정으로 we2_access_token 교환까지 검증되며(마일스톤 핵심 리스크 조기 해소), ApplyEngine이 이 토큰을 코드 변경 없이 그대로 사용해 신청을 수행할 수 있다.
-**Plans**: 2 plans
-- [ ] 05-01-PLAN.md — [wave 1] 트레이서: 이메일→OTP→팬이벤트 토큰 사다리 종단 배선 + 마스킹 방어선 + R019 실계정 스파이크(checkpoint) — **⚠ HALTED (2/3 tasks)**
-- [ ] 05-02-PLAN.md — [wave 2] 확장: OTP 재발송·만료 처리, 에러 코드 무손실 전파, AuthService 단위 테스트 + ApplyEngine 무변경 게이트 — **⛔ BLOCKED by 05-01**
+**Plans**: 3 plans (2026-08-25 재플랜 — 구 05-01(halted)/05-02(blocked)는 무효 전제 위에 있어 폐기·대체됨)
+- [ ] 05-01-PLAN.md — [wave 1] 트레이서: 헤드리스 로그인에서 계정 토큰 확보(쿠키 전량 열거 + CDP 폴백) → R019 사다리 종단 배선 + 관측성/마스킹 하드닝
+- [ ] 05-02-PLAN.md — [wave 1] 반증된 로그인 계약 문서 정정: REQUIREMENTS.md R017 서술 교체 · R018 보류(blocked)·매핑 해제 · PROJECT.md/ROADMAP 정합 (D-05)
+- [ ] 05-03-PLAN.md — [wave 2] R019 실계정 판정 체크포인트(사용자가 로그인 수행, `gate="blocking-human"`) + 05-SPIKE-RESULT.md 확정 · 실패 시 재시도 없이 halt
 
 > **⚠ Phase 05 HALTED (2026-08-25) — 재설계 필요.**
 > 실계정 스파이크에서 HAR 증거로 확인: `POST /v4/auth/token/by-credentials` 의 `otpSessionId`
 > 필드는 OTP 세션 ID 가 아니라 **reCAPTCHA Enterprise 토큰**(2489자)을 담는다. 실제 브라우저
 > 로그인은 `/v2/auth/otp-sessions` 를 호출하지 않으며 **OTP 단계 자체가 없다.** `-25044` 는
 > "OTP 필요"가 아니라 "캡차 토큰 없음/무효"다.
-> 영향: 위 Success Criteria 1·2 의 전제, R018 의 성립 여부, 05-02 의 OTP 재발송·만료 태스크
-> 전체가 무효. R019 는 로그인이 막혀 도달조차 못 함(미검증).
+> 영향: 위 Success Criteria 1·2 의 전제, R018 의 성립 여부, **구 05-02(폐기됨)** 의 OTP 재발송·만료
+> 태스크 전체가 무효. R019 는 로그인이 막혀 도달조차 못 함(미검증).
 > 근거 및 정정된 계약: `.planning/phases/05-api/05-01-SUMMARY.md`
+> (위 `**Plans**` 목록의 05-01/05-02/05-03 은 2026-08-25 재플랜으로 새로 작성된 것이며,
+> halted 상태였던 구 플랜 파일들과는 다른 내용이다.)
 
 ### Phase 06: 로그인 방식 선택 UI + 실패 안내
 **Goal**: 사용자가 로그인 방식(API 통신/브라우저)을 명시적으로 선택하고, 선택 시 제약을 사전 고지받으며, 로그인 실패 시 원인을 한국어로 이해할 수 있다.
