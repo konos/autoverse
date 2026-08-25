@@ -21,7 +21,7 @@
 
 **Milestone Goal:** 사용자가 로그인 방식을 API 통신과 브라우저 중 선택할 수 있게 하고, 각 방식의 제약을 앱이 명확히 안내한다.
 
-- [ ] **Phase 05: API 로그인 핵심 흐름 + 토큰 교환 검증** - otp-sessions → by-credentials(-with-otp) 3단계 API 로그인과 account→we2_access_token 교환을 구현하고 실계정으로 검증한다 (마일스톤 최대 리스크를 조기에 해소하는 스파이크)
+- [ ] **Phase 05: API 로그인 핵심 흐름 + 토큰 교환 검증** - 이미 동작하는 헤드리스 로그인에서 계정 토큰을 확보해 account→팬이벤트 토큰 사다리(R019)가 실계정에서 성립하는지 판정하고, 반증된 3단계 OTP 로그인 계약을 문서에서 정정한다 (2026-08-25 HAR 반증 후 재설계 — 마일스톤 최대 리스크 조기 해소 스파이크)
 - [ ] **Phase 06: 로그인 방식 선택 UI + 실패 안내** - 사용자가 API/브라우저 로그인 방식을 선택하고 선택값이 영속되며, 선택 시 제약 고지와 한국어 실패 사유를 확인할 수 있다
 - [ ] **Phase 07: API 자격 증명 저장 + 토큰 만료 사전 경고** - API 모드 자격증명을 암호화 저장해 재입력을 생략하고, 신청 대기 중 토큰 만료가 예상되면 사전에 재로그인을 유도한다
 
@@ -29,14 +29,14 @@
 
 ### Phase 05: API 로그인 핵심 흐름 + 토큰 교환 검증
 
-**Goal**: 사용자가 API 통신 모드에서 이메일/비밀번호 + 이메일 OTP만으로 로그인을 완료하고, 확보된 토큰으로 기존 신청 엔진이 코드 변경 없이 그대로 동작한다.
+**Goal**: 이미 동작 중인 헤드리스 로그인에서 계정 토큰을 확보해 account → 팬이벤트 토큰 사다리(R019)가 실계정에서 성립하는지 1회 관찰로 판정하고, 반증된 로그인 계약을 문서에서 제거한다.
 **Depends on**: Phase 04 (M001-ksbtje 완료 — 기존 AuthService/ApplyEngine 기반 위에 구축)
-**Requirements**: R017, R018, R019
+**Requirements**: R017, R019 (R018 은 2026-08-25 보류·매핑 해제)
 **Success Criteria** (what must be TRUE):
 
-  1. 사용자가 API 모드에서 이메일/비밀번호를 제출하면 매번 이메일로 6자리 OTP가 발송된다 (POST /v2/auth/otp-sessions → POST /v4/auth/token/by-credentials, otpSessionId 포함).
-  2. 사용자가 발송된 OTP를 입력하면 POST /v3/auth/token/by-credentials-with-otp 검증을 거쳐 API 로그인이 완료된다.
-  3. 로그인 완료 시 확보한 account 토큰이 실계정으로 we2_access_token 교환까지 검증되며(마일스톤 핵심 리스크 조기 해소), ApplyEngine이 이 토큰을 코드 변경 없이 그대로 사용해 신청을 수행할 수 있다.
+  1. **[VOID — 2026-08-25 HAR 반증]** 사용자가 API 모드에서 이메일/비밀번호를 제출하면 매번 이메일로 6자리 OTP가 발송된다 (POST /v2/auth/otp-sessions → POST /v4/auth/token/by-credentials, otpSessionId 포함).
+  2. **[VOID — 2026-08-25 HAR 반증]** 사용자가 발송된 OTP를 입력하면 POST /v3/auth/token/by-credentials-with-otp 검증을 거쳐 API 로그인이 완료된다.
+  3. (이 phase 의 유일한 유효 판정 기준) 로그인 완료 시 확보한 account 토큰이 실계정으로 we2_access_token 교환까지 검증되며(마일스톤 핵심 리스크 조기 해소), ApplyEngine이 이 토큰을 코드 변경 없이 그대로 사용해 신청을 수행할 수 있다.
 
 **Plans**: 3 plans (2026-08-25 재플랜 — 구 05-01(halted)/05-02(blocked)는 무효 전제 위에 있어 폐기·대체됨)
 **Wave 1**
@@ -58,6 +58,8 @@
 > 근거 및 정정된 계약: `.planning/phases/05-api/05-01-SUMMARY.md`
 > (위 `**Plans**` 목록의 05-01/05-02/05-03 은 2026-08-25 재플랜으로 새로 작성된 것이며,
 > halted 상태였던 구 플랜 파일들과는 다른 내용이다.)
+> **✅ 2026-08-25 재설계 완료** — Phase 05 는 R019 사다리 검증 스파이크로 재정의되어
+> 05-01(계정 토큰 확보 배선)·05-02(본 문서 정정)·05-03(실계정 판정 체크포인트) 3개 플랜으로 재실행된다.
 
 ### Phase 06: 로그인 방식 선택 UI + 실패 안내
 

@@ -30,19 +30,19 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - 방식 선택 UI — 브라우저 모드 기본값, API는 선택 옵션
 - 토큰 만료 사전 경고 — 신청 시각 전 토큰 수명 체크 후 재로그인 유도
 
-**검증된 API 계약 (2026-08-25 실측):**
+**계정 API 계약 (2026-08-25 HAR 실측으로 정정):**
 
 | 항목 | 값 |
 |---|---|
 | Base URL | `https://accountapi.weverse.io/web/api` |
-| 세션 생성 | `POST /v2/auth/otp-sessions` — body `{email}` |
-| 로그인 | `POST /v4/auth/token/by-credentials` — body `{email, password, otpSessionId}` |
-| OTP 로그인 | `POST /v3/auth/token/by-credentials-with-otp` — `+{otpCode, refreshTokenCookieTtl}` |
+| 세션 생성 | 실제 웹 클라이언트 로그인 흐름에 등장하지 않음(HAR 호출 0건) — R018 보류 |
+| 로그인 | `POST /v4/auth/token/by-credentials` **단독 호출** — body `{email, password, otpSessionId}` (`otpSessionId` = reCAPTCHA Enterprise 토큰(실측 2489자) — OTP 세션 식별자가 아니다) |
+| OTP 로그인 | 실제 웹 클라이언트 로그인 흐름에 등장하지 않음(HAR 호출 0건) — R018 보류 |
 | 필수 헤더 | `X-ACC-APP-VERSION: 4.7.1`, `X-ACC-APP-SECRET`, `X-ACC-SERVICE-ID: weverse`, `X-ACC-LANGUAGE`, `X-ACC-TRACE-ID` |
 | 비밀번호 | 평문 전송 (TLS 위) — 클라이언트 측 RSA/암호화 없음 |
-| reCAPTCHA | v3 invisible, **OTP 세션 생성 시에만** 사용 |
+| reCAPTCHA | reCAPTCHA Enterprise — 자격증명 로그인 요청 자체의 필수 입력. 순수 HTTP 로는 채울 수 없다 |
 
-**핵심 제약 (실측 확인):** 캡차 토큰 없이 순수 HTTP로 로그인하면 서버가 `-25044 이메일 OTP 인증이 필요합니다`로 응답한다. 즉 **API 모드는 매 로그인마다 OTP 입력이 강제**되며, 이 때문에 API 모드에서는 자동 재로그인이 불가능하다. 브라우저 모드가 기본값인 이유.
+**핵심 제약 (2026-08-25 HAR 실측으로 정정):** 순수 HTTP 로그인은 reCAPTCHA 관문에서 막힌다 — `-25044`는 "이메일 OTP 인증 필요"가 아니라 **캡차 토큰 없음/무효** 신호였다. 캡차 우회는 R013 으로 영구 제외이므로, 현재 동작하는 유일한 로그인 경로는 실제 로그인 페이지를 띄우는 헤드리스 BrowserWindow 다. 근거: `.planning/phases/05-api/05-01-SUMMARY.md`.
 
 ## Architecture / Key Patterns
 
