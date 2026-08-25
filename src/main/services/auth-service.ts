@@ -7,6 +7,12 @@ import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/
 import { logService } from "./log-service";
 import { ApiAuthClient, ApiAuthError, type AccountTokens } from "./api-auth-client";
 import { resolveLoginMode } from "../login-mode";
+import {
+  pickAccountTokenCookie,
+  summarizeCookies,
+  describeTokenShape,
+  type CookieLike,
+} from "./account-token-capture";
 
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
@@ -31,6 +37,15 @@ interface StoredCredentials {
   password: string;
 }
 
+/** R019 사다리 검증 스파이크의 종단 결과 (05-01 재설계). */
+export interface AccountTokenLadderSpikeResult {
+  verdict: "pass" | "fail" | "skipped";
+  tokenSource: "cookie" | "cdp" | "none";
+  ladderSource: "direct" | "exchange" | null;
+  fanId: number | null;
+  reason: string;
+}
+
 export class AuthService extends EventEmitter {
   private cachedToken: string | null = null;
   private cachedFanId: number | undefined = undefined;
@@ -42,8 +57,21 @@ export class AuthService extends EventEmitter {
   private pendingCredentials: { email: string; password: string } | null = null;
 
   // API login state (Phase 05 — pure HTTP login path)
-  private apiClient = new ApiAuthClient();
+  private apiClient: ApiAuthClient;
   private apiLoginState: { email: string; password: string; otpSessionId: string } | null = null;
+
+  // Account-token ladder spike state (Phase 05 재설계 — R019 검증)
+  private spikeInFlight = false;
+  private accountTokenCapture: {
+    getCapturedAccessToken(): string | null;
+    sawResponse: boolean;
+    detachReason: string | null;
+  } | null = null;
+
+  constructor(apiClient: ApiAuthClient = new ApiAuthClient()) {
+    super();
+    this.apiClient = apiClient;
+  }
 
   get token(): string | null {
     return this.cachedToken;
@@ -404,6 +432,12 @@ export class AuthService extends EventEmitter {
       if (result === "token") {
         logService.info("AuthService", "credentialLogin(headless): token obtained directly");
         this.saveCredentials(email, password);
+        void this.runAccountTokenLadderSpike("credentialLogin").catch((err) => {
+          logService.error(
+            "AuthService",
+            `runAccountTokenLadderSpike(credentialLogin) failed: ${String(err)}`,
+          );
+        });
         this.cleanupHeadless();
         return { success: true };
       }
@@ -698,6 +732,113 @@ export class AuthService extends EventEmitter {
       this.headlessWindow.close();
     }
     this.headlessWindow = null;
+  }
+
+  /**
+   * R019 사다리 검증 스파이크 (D-02/D-03/D-04) — `persist:weverse` 파티션의
+   * 쿠키를 필터 없이 전량 열거해 계정 토큰 후보를 고르고(쿠키 우선), 없으면
+   * `attachAccountTokenCapture()`가 채워둔 CDP 캡처 핸들로 폴백한 뒤
+   * `acquireFaneventToken()` 사다리에 흘려 verdict를 로그로 남긴다.
+   *
+   * 관측이 목적인 스파이크이므로 어떤 실패 경로도 예외를 던지지 않는다.
+   * `this.cachedToken`/`this.cachedFanId`에는 절대 대입하지 않는다 — 이
+   * 메서드가 ApplyEngine이 읽는 `authService.token`을 바꾸면 안 된다.
+   */
+  async runAccountTokenLadderSpike(trigger: string): Promise<AccountTokenLadderSpikeResult> {
+    const logVerdict = (
+      result: AccountTokenLadderSpikeResult,
+    ): AccountTokenLadderSpikeResult => {
+      logService.info(
+        "AuthService",
+        `accountTokenLadderSpike: verdict=${result.verdict} tokenSource=${result.tokenSource} ladderSource=${result.ladderSource ?? "none"} fanId=${result.fanId ?? "none"} reason=${result.reason}`,
+      );
+      return result;
+    };
+
+    if (this.spikeInFlight) {
+      logService.info(
+        "AuthService",
+        `runAccountTokenLadderSpike: already running — skipping this call (trigger=${trigger})`,
+      );
+      return logVerdict({
+        verdict: "skipped",
+        tokenSource: "none",
+        ladderSource: null,
+        fanId: null,
+        reason: "already-running",
+      });
+    }
+
+    this.spikeInFlight = true;
+    try {
+      const ses = session.fromPartition("persist:weverse");
+      const cookies = (await ses.cookies.get({})) as CookieLike[];
+      logService.info(
+        "AuthService",
+        `accountTokenDiscovery: partition=persist:weverse cookies=${cookies.length}`,
+      );
+      logService.info("AuthService", `accountTokenDiscovery: ${summarizeCookies(cookies)}`);
+
+      const candidate = pickAccountTokenCookie(cookies);
+      let token: string | null = null;
+      let tokenSource: AccountTokenLadderSpikeResult["tokenSource"] = "none";
+
+      if (candidate) {
+        logService.info(
+          "AuthService",
+          `accountTokenDiscovery: candidate=${candidate.name}@${candidate.domain ?? "?"} len=${candidate.value.length}`,
+        );
+        token = candidate.value;
+        tokenSource = "cookie";
+      } else {
+        logService.info("AuthService", "accountTokenDiscovery: candidate=none");
+        const cdpToken = this.accountTokenCapture?.getCapturedAccessToken() ?? null;
+        if (cdpToken) {
+          token = cdpToken;
+          tokenSource = "cdp";
+        }
+      }
+
+      if (!token) {
+        const reason = `no account token — cookieCandidate=none cdpSawResponse=${this.accountTokenCapture?.sawResponse ?? false} cdpDetach=${this.accountTokenCapture?.detachReason ?? "none"}`;
+        logService.info("AuthService", `accountTokenLadderSpike: ${reason}`);
+        return logVerdict({
+          verdict: "fail",
+          tokenSource: "none",
+          ladderSource: null,
+          fanId: null,
+          reason,
+        });
+      }
+
+      logService.info(
+        "AuthService",
+        `accountTokenLadderSpike: tokenSource=${tokenSource} ${describeTokenShape(token)} matchesWe2Cookie=${token === this.cachedToken}`,
+      );
+
+      try {
+        const { source, fanId } = await this.apiClient.acquireFaneventToken(token);
+        return logVerdict({
+          verdict: "pass",
+          tokenSource,
+          ladderSource: source,
+          fanId,
+          reason: "ok",
+        });
+      } catch (err) {
+        const reason =
+          err instanceof ApiAuthError ? `${err.code}: ${err.message}` : String(err);
+        return logVerdict({
+          verdict: "fail",
+          tokenSource,
+          ladderSource: null,
+          fanId: null,
+          reason,
+        });
+      }
+    } finally {
+      this.spikeInFlight = false;
+    }
   }
 
   /** Open Weverse login in a child BrowserWindow with isolated cookie partition */

@@ -4,6 +4,16 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+// ── Mutable cookie fixture, wired through the mocked `session.fromPartition` ──
+// `vi.hoisted()` is required because `vi.mock()` factories are hoisted above
+// all imports — referencing an ordinary outer `let` here would throw
+// "Cannot access before initialization".
+const { cookieFixtureBox } = vi.hoisted(() => ({
+  cookieFixtureBox: {
+    current: [] as Array<{ name: string; domain?: string; value: string; httpOnly?: boolean }>,
+  },
+}));
+
 // ── Electron mock — must be declared before the module import ─────────────────
 vi.mock("electron", () => ({
   BrowserWindow: vi.fn(),
@@ -15,12 +25,21 @@ vi.mock("electron", () => ({
   },
   session: {
     fromPartition: vi.fn(() => ({
-      cookies: { get: vi.fn(async () => []) },
+      cookies: {
+        get: vi.fn(async (filter?: { name?: string }) => {
+          if (filter && filter.name) {
+            return cookieFixtureBox.current.filter((c) => c.name === filter.name);
+          }
+          return cookieFixtureBox.current;
+        }),
+      },
     })),
   },
 }));
 
+import { BrowserWindow } from "electron";
 import { AuthService } from "../auth-service";
+import { ApiAuthClient } from "../api-auth-client";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -202,5 +221,123 @@ describe("AuthService.tryAutoLogin API 모드 게이트", () => {
 
     expect(result).toBe(false);
     expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── runAccountTokenLadderSpike (Phase 05 재설계 — R019 사다리 검증) ─────────
+
+interface StubResponse {
+  status: number;
+  body?: unknown;
+}
+
+/** Serves `responses` in order, repeating the last entry if over-called (mirrors api-auth-client.test.ts). */
+function makeFetchQueue(responses: StubResponse[]): typeof globalThis.fetch {
+  let i = 0;
+  return vi.fn(async () => {
+    const r = responses[Math.min(i, responses.length - 1)];
+    i++;
+    return {
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      json: async () => r.body,
+    } as unknown as Response;
+  });
+}
+
+const LONG_TOKEN = "a".repeat(150);
+
+describe("AuthService.runAccountTokenLadderSpike", () => {
+  beforeEach(() => {
+    cookieFixtureBox.current = [];
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cookieFixtureBox.current = [];
+  });
+
+  it("종단(pass): 쿠키 후보가 있고 /fans/me 가 200+fanId 를 주면 tokenSource=cookie, ladderSource=direct 를 반환한다", async () => {
+    cookieFixtureBox.current = [
+      { name: "acc_token", value: LONG_TOKEN, domain: "account.weverse.io" },
+    ];
+    const fetchFn = makeFetchQueue([{ status: 200, body: { fanId: 12345 } }]);
+    const service = new AuthService(new ApiAuthClient(fetchFn));
+
+    const result = await service.runAccountTokenLadderSpike("test");
+
+    expect(result).toEqual({
+      verdict: "pass",
+      tokenSource: "cookie",
+      ladderSource: "direct",
+      fanId: 12345,
+      reason: "ok",
+    });
+  });
+
+  it("종단(fail/none): 쿠키 후보가 없고 CDP 캡처도 없으면 사다리를 호출하지 않고 fail/none 을 반환한다", async () => {
+    cookieFixtureBox.current = [];
+    const fetchFn = makeFetchQueue([{ status: 200, body: { fanId: 1 } }]);
+    const service = new AuthService(new ApiAuthClient(fetchFn));
+
+    const result = await service.runAccountTokenLadderSpike("test");
+
+    expect(result.verdict).toBe("fail");
+    expect(result.tokenSource).toBe("none");
+    expect(result.ladderSource).toBeNull();
+    const mock = fetchFn as unknown as ReturnType<typeof vi.fn>;
+    expect(mock.mock.calls.length).toBe(0);
+  });
+
+  it("단일 비행: 진행 중인 호출이 있을 때 두 번째 호출은 즉시 skipped/already-running 을 반환한다", async () => {
+    cookieFixtureBox.current = [
+      { name: "acc_token", value: LONG_TOKEN, domain: "account.weverse.io" },
+    ];
+    const fetchFn = makeFetchQueue([{ status: 200, body: { fanId: 1 } }]);
+    const service = new AuthService(new ApiAuthClient(fetchFn));
+
+    const first = service.runAccountTokenLadderSpike("first");
+    const second = await service.runAccountTokenLadderSpike("second");
+
+    expect(second).toEqual({
+      verdict: "skipped",
+      tokenSource: "none",
+      ladderSource: null,
+      fanId: null,
+      reason: "already-running",
+    });
+
+    await first;
+  });
+
+  it("멱등: 연속 2회 호출해도 BrowserWindow 목이 0회 호출되고, by-credentials(로그인) 요청이 0건이다", async () => {
+    cookieFixtureBox.current = [
+      { name: "acc_token", value: LONG_TOKEN, domain: "account.weverse.io" },
+    ];
+    const fetchFn = makeFetchQueue([{ status: 200, body: { fanId: 1 } }]);
+    const service = new AuthService(new ApiAuthClient(fetchFn));
+
+    await service.runAccountTokenLadderSpike("call-1");
+    await service.runAccountTokenLadderSpike("call-2");
+
+    expect(vi.mocked(BrowserWindow).mock.calls.length).toBe(0);
+
+    const mock = fetchFn as unknown as ReturnType<typeof vi.fn>;
+    const urlsCalled = mock.mock.calls.map((c) => String(c[0]));
+    expect(urlsCalled.some((u) => u.includes("by-credentials"))).toBe(false);
+  });
+
+  it("비침습: 스파이크 호출 전후로 authService.token 값이 변하지 않는다", async () => {
+    cookieFixtureBox.current = [
+      { name: "acc_token", value: LONG_TOKEN, domain: "account.weverse.io" },
+    ];
+    const fetchFn = makeFetchQueue([{ status: 200, body: { fanId: 1 } }]);
+    const service = new AuthService(new ApiAuthClient(fetchFn));
+
+    const before = service.token;
+    await service.runAccountTokenLadderSpike("test");
+    const after = service.token;
+
+    expect(after).toBe(before);
   });
 });
