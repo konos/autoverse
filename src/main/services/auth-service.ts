@@ -128,6 +128,22 @@ export class AuthService extends EventEmitter {
   // ── Auto-login on app start ─────────────────────────────────────────────
 
   async tryAutoLogin(): Promise<boolean> {
+    // API 모드는 매 로그인마다 OTP 를 강제하므로 저장된 자격증명으로 조용히
+    // 자동 로그인할 방법이 없다 (PROJECT.md 락인 제약). 헤드리스 credentialLogin()
+    // 을 호출하지 않는 것은 물론, persist:weverse 쿠키 파티션(브라우저 모드의
+    // 상태)도 조회하지 않는다 — 다른 모드/다른 계정의 잔여 세션을 API 모드
+    // 시작 시 조용히 재사용하는 것을 방지한다 (Pitfall 4 의 정신을 읽기 경로에도
+    // 적용). main.ts 앱 시작 경로와 ipc-handlers.ts 의 `auth:auto-login` 핸들러가
+    // 모두 이 메서드 하나로 수렴하므로, 여기 한 곳의 게이트로 두 진입점이 함께
+    // 막힌다.
+    if (resolveLoginMode() === "api") {
+      logService.info(
+        "AuthService",
+        "tryAutoLogin: API 모드는 저장된 자격증명으로 자동 로그인 불가 — 매 로그인마다 OTP 필요 (사용자 개입 대기)",
+      );
+      return false;
+    }
+
     // First check if existing token in cookies is still valid
     const tokenFound = await this.extractTokenFromCookies();
     if (tokenFound) {

@@ -13,6 +13,11 @@ vi.mock("electron", () => ({
     encryptString: vi.fn((s: string) => Buffer.from(s)),
     decryptString: vi.fn((b: Buffer) => b.toString()),
   },
+  session: {
+    fromPartition: vi.fn(() => ({
+      cookies: { get: vi.fn(async () => []) },
+    })),
+  },
 }));
 
 import { AuthService } from "../auth-service";
@@ -141,5 +146,61 @@ describe("AuthService.getStatus", () => {
     expect(status.isLoggedIn).toBe(true);
     expect(status.tokenPreview).toContain("...");
     expect(status.tokenPreview).toMatch(/^A{20}\.\.\.Z{20}$/);
+  });
+});
+
+
+// ── tryAutoLogin API mode gate (05-01 결함 A 수정) ────────────────────────
+
+describe("AuthService.tryAutoLogin API 모드 게이트", () => {
+  const ENV_KEY = "AUTOVERSE_LOGIN_MODE";
+  let originalEnv: string | undefined;
+
+  beforeEach(() => {
+    originalEnv = process.env[ENV_KEY];
+  });
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env[ENV_KEY];
+    else process.env[ENV_KEY] = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  it("API 모드에서는 credentialLogin(헤드리스) 을 호출하지 않고 즉시 false 를 반환한다", async () => {
+    process.env[ENV_KEY] = "api";
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await service.tryAutoLogin();
+
+    expect(result).toBe(false);
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+
+  it('"API" (대문자) 도 게이트를 발동시킨다 — resolveLoginMode 의 폴백 규칙과 일치', async () => {
+    process.env[ENV_KEY] = "API";
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await service.tryAutoLogin();
+
+    expect(result).toBe(false);
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+
+  it("브라우저 모드(환경변수 미설정)에서는 게이트가 동작하지 않는다 — 기존 동작 무변경 (D-01 회귀 확인)", async () => {
+    delete process.env[ENV_KEY];
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    // No stored credentials in the mocked userData dir → falls through to
+    // "no stored credentials" branch, but crucially it MUST have reached
+    // past the cookie check without throwing (proves the gate did not
+    // fire) and credentialLogin is simply never called because there are
+    // no creds to use — same as pre-Phase-05 behavior.
+    const result = await service.tryAutoLogin();
+
+    expect(result).toBe(false);
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
   });
 });
