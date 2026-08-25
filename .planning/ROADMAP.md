@@ -41,7 +41,7 @@
 **Plans**: 3 plans (2026-08-25 재플랜 — 구 05-01(halted)/05-02(blocked)는 무효 전제 위에 있어 폐기·대체됨)
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — [wave 1] 트레이서: 헤드리스 로그인에서 계정 토큰 확보(쿠키 전량 열거 + CDP 폴백) → R019 사다리 종단 배선 + 관측성/마스킹 하드닝
+- [x] 05-01-PLAN.md — [wave 1] 트레이서: 헤드리스 로그인에서 계정 토큰 확보(쿠키 전량 열거 + CDP 폴백) → R019 사다리 종단 배선 + 관측성/마스킹 하드닝
 - [ ] 05-02-PLAN.md — [wave 1] 반증된 로그인 계약 문서 정정: REQUIREMENTS.md R017 서술 교체 · R018 보류(blocked)·매핑 해제 · PROJECT.md/ROADMAP 정합 (D-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*

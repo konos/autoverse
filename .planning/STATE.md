@@ -4,17 +4,17 @@ milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 05
 current_phase_name: API 로그인 핵심 흐름 + 토큰 교환 검증
-status: ready_to_execute
-stopped_at: "Phase 05 재플랜 완료 — 3개 플랜(2 waves) 생성, 실행 대기"
-last_updated: "2026-08-25T08:46:28.281Z"
+status: executing
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-08-25T09:18:19.982Z"
 last_activity: 2026-08-25
-last_activity_desc: "Phase 05 재플랜 — R019 사다리 검증 스파이크로 재설계, 플랜 3개 생성"
-state_head: 9c68df7503c737e99567f547311e1c35ca330453
+last_activity_desc: Phase 05 execution started
+state_head: acbe290548278befb1828ae461926f42facfd64a
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 ## Current Position
 
-Phase: 05 (API 로그인 핵심 흐름 + 토큰 교환 검증) — READY TO EXECUTE
-Plan: 3 plans in 2 waves — 05-01/05-02 (wave 1, 병렬), 05-03 (wave 2, human checkpoint)
-Status: Ready to execute — halt 후 재설계 완료 (2026-08-25)
-Last activity: 2026-08-25 — 재플랜: CONTEXT/RESEARCH/VALIDATION/COVERAGE 재작성 + 플랜 3개 생성
+Phase: 05 (API 로그인 핵심 흐름 + 토큰 교환 검증) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-08-25 — Phase 05 execution started
 
 **재설계 요지:** 구 halt 사유(`POST /v4/auth/token/by-credentials` 의 `otpSessionId` 필드가 OTP
 세션 ID 가 아니라 reCAPTCHA Enterprise 토큰이며 실제 로그인 흐름에 OTP 단계가 없다는 HAR 증거)는
@@ -65,6 +65,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 05-api P01 | ~35min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -76,6 +81,7 @@ Recent decisions affecting current work:
 - v0.3.0: 브라우저 모드를 기본값으로 유지 (API 모드는 매 로그인 OTP 강제)
 - v0.3.0: API 모드 토큰 만료는 자동 재로그인 대신 사전 경고로 대응 (Phase 07)
 - v0.3.0: 로그인 API를 리버싱해 직접 호출 — 계약은 2026-08-25 실서버 프로브로 검증됨, Phase 05에서 실계정 토큰 교환까지 검증 예정
+- [Phase 05]: R019 사다리 검증 스파이크 배선 완료 — 쿠키 우선 + CDP 폴백으로 account 토큰 확보해 acquireFaneventToken()에 공급, verdict 로그로 관측 가능. 실계정 판정은 05-03 체크포인트로 이관
 
 ### Pending Todos
 
@@ -93,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-25T07:59:45.598Z
-Stopped at: Phase 05 context gathered — R019 사다리 검증 스파이크로 재설계 방향 확정 (재플랜 대기)
-Resume file: .planning/phases/05-api/05-CONTEXT.md
+Last session: 2026-08-25T09:18:19.971Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
