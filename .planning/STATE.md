@@ -4,17 +4,17 @@ milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 05
 current_phase_name: API 로그인 핵심 흐름 + 토큰 교환 검증
-status: blocked
-stopped_at: Phase 05 context gathered — R019 사다리 검증 스파이크로 재설계 방향 확정 (재플랜 대기)
-last_updated: "2026-08-25T07:59:45.611Z"
+status: ready_to_execute
+stopped_at: "Phase 05 재플랜 완료 — 3개 플랜(2 waves) 생성, 실행 대기"
+last_updated: "2026-08-25T08:46:28.281Z"
 last_activity: 2026-08-25
-last_activity_desc: Phase 05 halted — API 계약 전제 무효화, 재설계 대기
-state_head: f59da445b3c58e57d6140b997359b0aabfde839f
+last_activity_desc: "Phase 05 재플랜 — R019 사다리 검증 스파이크로 재설계, 플랜 3개 생성"
+state_head: 9c68df7503c737e99567f547311e1c35ca330453
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 2
-  completed_plans: 1
+  total_plans: 3
+  completed_plans: 0
   percent: 0
 ---
 
@@ -29,16 +29,18 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 ## Current Position
 
-Phase: 05 (API 로그인 핵심 흐름 + 토큰 교환 검증) — HALTED
-Plan: 05-01 halted (2/3 tasks), 05-02 blocked by 05-01
-Status: Blocked — 재설계 필요 (PROJECT.md 의 "검증된 3단계 로그인 계약"이 HAR 증거로 반증됨)
-Last activity: 2026-08-25 — 05-01 halt, 05-01-SUMMARY.md 에 정정된 실제 API 계약 기록
+Phase: 05 (API 로그인 핵심 흐름 + 토큰 교환 검증) — READY TO EXECUTE
+Plan: 3 plans in 2 waves — 05-01/05-02 (wave 1, 병렬), 05-03 (wave 2, human checkpoint)
+Status: Ready to execute — halt 후 재설계 완료 (2026-08-25)
+Last activity: 2026-08-25 — 재플랜: CONTEXT/RESEARCH/VALIDATION/COVERAGE 재작성 + 플랜 3개 생성
 
-**Halt 사유:** `POST /v4/auth/token/by-credentials` 의 `otpSessionId` 필드는 OTP 세션 ID 가
-아니라 reCAPTCHA Enterprise 토큰(2489자)을 담는 필드다. 실제 브라우저 로그인은
-`/v2/auth/otp-sessions` 를 호출하지 않으며 OTP 단계 자체가 없다. `-25044` 는 "OTP 필요"가
-아니라 "캡차 토큰 없음/무효"를 뜻한다. R017/R018/R019 와 05-02 전체가 이 전제 위에 있어
-재설계 없이는 진행 불가. 근거: `.planning/phases/05-api/05-01-SUMMARY.md`
+**재설계 요지:** 구 halt 사유(`POST /v4/auth/token/by-credentials` 의 `otpSessionId` 필드가 OTP
+세션 ID 가 아니라 reCAPTCHA Enterprise 토큰이며 실제 로그인 흐름에 OTP 단계가 없다는 HAR 증거)는
+그대로 유효하다. 이 사실을 전제로 Phase 05 를 **R019 사다리 검증 스파이크**로 재정의했다 —
+이미 동작하는 헤드리스 브라우저 로그인으로 account 토큰을 확보하고(D-02), `acquireFaneventToken()`
+사다리의 rung1/rung2 를 실계정으로 판정한다(D-03). 로그인 방식의 최종 결정은 사다리 결과 이후다(D-04).
+구 05-01(halted)/05-02(blocked) 플랜은 폐기·대체됐다. 정본 근거: `.planning/phases/05-api/05-01-SUMMARY.md`,
+결정 사항: `.planning/phases/05-api/05-CONTEXT.md`
 
 Progress: [░░░░░░░░░░] 0%
 
