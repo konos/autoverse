@@ -4,17 +4,17 @@ milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 05
 current_phase_name: API 로그인 핵심 흐름 + 토큰 교환 검증
-status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-08-25T09:26:55.472Z"
+status: verifying
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-08-25T09:51:12.699Z"
 last_activity: 2026-08-25
 last_activity_desc: Phase 05 execution started
-state_head: 42a5243e2e2148500abbd948c46dad183adb3581
+state_head: a5e6e8b61e0e4c221b2f71c0ecb5f0931bdea72a
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 Phase: 05 (API 로그인 핵심 흐름 + 토큰 교환 검증) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-25 — Phase 05 execution started
 
 **재설계 요지:** 구 halt 사유(`POST /v4/auth/token/by-credentials` 의 `otpSessionId` 필드가 OTP
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 05-api P01 | ~35min | 3 tasks | 6 files |
 | Phase 05-api P02 | 20 min | 2 tasks | 3 files |
+| Phase 05-api P03 | ~20min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase 05]: R018 삭제 대신 blocked+매핑해제로 기록 (D-05) — HAR 상 OTP 단계 부재, 05-01-SUMMARY.md 근거
 - [Phase 05]: R017 항목 본문에서 반증된 옛 엔드포인트 이름 언급을 배제, 반증 서술은 R018 Notes로 분리
 - [Phase 05]: ROADMAP Phase 05 Success Criteria 1·2를 삭제 대신 [VOID] 마킹으로 보존 — 학습 자산 기록 원칙
+- [Phase 05]: R019 실계정 관측으로 validated — rung1(직접 사용)이 계정 도메인 쿠키(rt, JWT 451자)로 /fans/me 200+fanId 확보. rung2(교환)는 미실행으로 여전히 미검증
+- [Phase 05]: credentialLogin 리다이렉트 URL 로그가 access_token/refresh_token 원문을 마스킹 없이 남기는 결함 발견 — 이 plan은 코드 변경 금지 제약이라 수정하지 않고 Phase 06/07로 이관 (05-SPIKE-RESULT.md 참고)
 
 ### Pending Todos
 
@@ -103,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-25T09:26:55.461Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-08-25T09:51:12.689Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None

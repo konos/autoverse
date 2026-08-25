@@ -46,7 +46,7 @@
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 05-03-PLAN.md — [wave 2] R019 실계정 판정 체크포인트(사용자가 로그인 수행, `gate="blocking-human"`) + 05-SPIKE-RESULT.md 확정 · 실패 시 재시도 없이 halt
+- [x] 05-03-PLAN.md — [wave 2] R019 실계정 판정 체크포인트(사용자가 로그인 수행, `gate="blocking-human"`) + 05-SPIKE-RESULT.md 확정 · 실패 시 재시도 없이 halt
 
 > **⚠ Phase 05 HALTED (2026-08-25) — 재설계 필요.**
 > 실계정 스파이크에서 HAR 증거로 확인: `POST /v4/auth/token/by-credentials` 의 `otpSessionId`
