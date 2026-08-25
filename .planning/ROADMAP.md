@@ -1,8 +1,73 @@
-# Roadmap
+# Roadmap: Autoverse
 
-## M001-ksbtje: M001-ksbtje
+## Milestones
+
+- ✅ **M001-ksbtje** - Phases 01-04 (shipped 2026-05-13)
+- 🚧 **v0.3.0 로그인 방식 선택 (API / 브라우저)** - Phases 05-07 (in progress)
+
+## Phases
+
+<details>
+<summary>✅ M001-ksbtje (Phases 01-04) - SHIPPED 2026-05-13</summary>
 
 - [x] **Phase 01: s01** — S01
 - [x] **Phase 02: s02** — S02
 - [x] **Phase 03: s03** — S03
 - [x] **Phase 04: s04** — S04
+
+</details>
+
+### 🚧 v0.3.0 로그인 방식 선택 (API / 브라우저) (In Progress)
+
+**Milestone Goal:** 사용자가 로그인 방식을 API 통신과 브라우저 중 선택할 수 있게 하고, 각 방식의 제약을 앱이 명확히 안내한다.
+
+- [ ] **Phase 05: API 로그인 핵심 흐름 + 토큰 교환 검증** - otp-sessions → by-credentials(-with-otp) 3단계 API 로그인과 account→we2_access_token 교환을 구현하고 실계정으로 검증한다 (마일스톤 최대 리스크를 조기에 해소하는 스파이크)
+- [ ] **Phase 06: 로그인 방식 선택 UI + 실패 안내** - 사용자가 API/브라우저 로그인 방식을 선택하고 선택값이 영속되며, 선택 시 제약 고지와 한국어 실패 사유를 확인할 수 있다
+- [ ] **Phase 07: API 자격 증명 저장 + 토큰 만료 사전 경고** - API 모드 자격증명을 암호화 저장해 재입력을 생략하고, 신청 대기 중 토큰 만료가 예상되면 사전에 재로그인을 유도한다
+
+## Phase Details
+
+### Phase 05: API 로그인 핵심 흐름 + 토큰 교환 검증
+**Goal**: 사용자가 API 통신 모드에서 이메일/비밀번호 + 이메일 OTP만으로 로그인을 완료하고, 확보된 토큰으로 기존 신청 엔진이 코드 변경 없이 그대로 동작한다.
+**Depends on**: Phase 04 (M001-ksbtje 완료 — 기존 AuthService/ApplyEngine 기반 위에 구축)
+**Requirements**: R017, R018, R019
+**Success Criteria** (what must be TRUE):
+  1. 사용자가 API 모드에서 이메일/비밀번호를 제출하면 매번 이메일로 6자리 OTP가 발송된다 (POST /v2/auth/otp-sessions → POST /v4/auth/token/by-credentials, otpSessionId 포함).
+  2. 사용자가 발송된 OTP를 입력하면 POST /v3/auth/token/by-credentials-with-otp 검증을 거쳐 API 로그인이 완료된다.
+  3. 로그인 완료 시 확보한 account 토큰이 실계정으로 we2_access_token 교환까지 검증되며(마일스톤 핵심 리스크 조기 해소), ApplyEngine이 이 토큰을 코드 변경 없이 그대로 사용해 신청을 수행할 수 있다.
+**Plans**: TBD
+
+### Phase 06: 로그인 방식 선택 UI + 실패 안내
+**Goal**: 사용자가 로그인 방식(API 통신/브라우저)을 명시적으로 선택하고, 선택 시 제약을 사전 고지받으며, 로그인 실패 시 원인을 한국어로 이해할 수 있다.
+**Depends on**: Phase 05
+**Requirements**: R016, R020, R021
+**Success Criteria** (what must be TRUE):
+  1. 사용자가 로그인 화면에서 API 통신 또는 브라우저 로그인 방식을 선택할 수 있고, 선택값은 앱을 재시작해도 유지된다 (기본값은 브라우저, 기존 브라우저 로그인 동작은 변경 없이 이 선택기 뒤로 배선됨).
+  2. 사용자가 API 모드를 처음 선택하면 "매 로그인마다 이메일 OTP 필요, 자동 재로그인 불가"라는 안내를 확인해야만 진행할 수 있다.
+  3. API 로그인이 실패하면 -25003/-25044/-26000/-26004/해외 로그인 차단 등 서버 에러 코드 대신 사용자가 이해할 수 있는 한국어 설명 문구가 표시된다.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 07: API 자격 증명 저장 + 토큰 만료 사전 경고
+**Goal**: API 모드 사용자가 매 로그인마다 자격증명을 재입력하지 않아도 되고, 신청 대기 중 토큰이 만료되기 전에 재로그인할 시간을 사전에 확보한다.
+**Depends on**: Phase 05, Phase 06
+**Requirements**: R022, R023
+**Success Criteria** (what must be TRUE):
+  1. 사용자가 API 모드로 한 번 로그인하면 이메일/비밀번호는 다음 로그인 시 자동으로 채워져 있고 OTP 코드만 다시 입력하면 된다 (safeStorage 암호화 저장 재사용, OTP 코드 자체는 저장하지 않음).
+  2. 신청 예정 시각까지 대기하는 도중 토큰이 만료될 것으로 예상되면, 신청이 실행되기 전에 재로그인 필요 경고가 사용자에게 표시된다.
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 05 → 06 → 07
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 01. s01 | M001-ksbtje | - | Complete | 2026-05-13 |
+| 02. s02 | M001-ksbtje | - | Complete | 2026-05-13 |
+| 03. s03 | M001-ksbtje | - | Complete | 2026-05-13 |
+| 04. s04 | M001-ksbtje | - | Complete | 2026-05-13 |
+| 05. API 로그인 핵심 흐름 + 토큰 교환 검증 | v0.3.0 | 0/TBD | Not started | - |
+| 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 0/TBD | Not started | - |
+| 07. API 자격 증명 저장 + 토큰 만료 사전 경고 | v0.3.0 | 0/TBD | Not started | - |

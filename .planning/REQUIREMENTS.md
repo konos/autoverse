@@ -125,7 +125,7 @@ This file is the explicit capability and coverage contract for the project.
 - Description: 사용자가 로그인 방식을 API 통신과 브라우저 중 선택할 수 있고, 선택이 다음 실행에도 유지된다.
 - Why it matters: 클라이언트가 브라우저 없이 통신만으로 동작하기를 요청했으나, API 방식은 매 로그인 OTP가 강제되어 선착순 자동화 가치를 훼손한다. 둘 다 제공하고 사용자가 트레이드오프를 선택하게 한다.
 - Source: client
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 06
 - Validation: unmapped
 - Notes: 브라우저 모드가 기본값. 선택값은 설정에 영속 저장.
 
@@ -136,7 +136,7 @@ This file is the explicit capability and coverage contract for the project.
 - Description: 이메일/비밀번호로 위버스 계정 API에 직접 로그인한다. POST /v2/auth/otp-sessions → POST /v4/auth/token/by-credentials.
 - Why it matters: 브라우저 엔진 없이 순수 HTTP로 인증하는 경로의 핵심.
 - Source: client
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 05
 - Validation: unmapped
 - Notes: Base URL https://accountapi.weverse.io/web/api. 필수 헤더 X-ACC-APP-VERSION(4.7.1), X-ACC-APP-SECRET, X-ACC-SERVICE-ID(weverse), X-ACC-LANGUAGE, X-ACC-TRACE-ID. otpSessionId는 필수 필드 — 누락 시 -26000. 비밀번호는 평문 전송(TLS), 클라이언트 암호화 없음. 2026-08-25 실서버 프로브로 계약 검증됨.
 
@@ -147,7 +147,7 @@ This file is the explicit capability and coverage contract for the project.
 - Description: API 모드 로그인 시 이메일로 발송된 6자리 OTP를 앱에서 입력해 인증을 완료한다. POST /v2/auth/otp로 발송, POST /v3/auth/token/by-credentials-with-otp로 검증.
 - Why it matters: 캡차 토큰 없는 순수 HTTP 로그인은 서버가 OTP를 강제한다(-25044 실측 확인). API 모드에서 우회 불가능한 필수 단계.
 - Source: 실서버 검증
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 05
 - Validation: unmapped
 - Notes: OTP 코드는 절대 저장하지 않는다. 재발송 및 만료(expiresIn) 처리 포함.
 
@@ -158,9 +158,9 @@ This file is the explicit capability and coverage contract for the project.
 - Description: API 로그인으로 받은 account 토큰을 팬이벤트 API용 we2_access_token으로 확보해 기존 신청 엔진이 그대로 동작하게 한다.
 - Why it matters: 이 교환이 없으면 API 로그인에 성공해도 신청을 못 한다. 두 로그인 경로가 같은 다운스트림 인터페이스로 수렴해야 ApplyEngine을 건드리지 않는다.
 - Source: 아키텍처 요구
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 05
 - Validation: unmapped
-- Notes: **미검증 리스크** — 실계정 로그인 없이는 교환 경로를 확인할 수 없었다. 마일스톤 초반 스파이크로 조기 검증 필요. 실패 시 0.5~1일 추가 예상.
+- Notes: **미검증 리스크** — 실계정 로그인 없이는 교환 경로를 확인할 수 없었다. Phase 05를 마일스톤 첫 phase로 배치해 조기 스파이크로 검증한다. 실패 시 0.5~1일 추가 예상.
 
 ### R020 — API 로그인 실패 사유 한국어 안내
 
@@ -169,7 +169,7 @@ This file is the explicit capability and coverage contract for the project.
 - Description: 서버가 반환하는 에러 코드를 사용자가 이해할 수 있는 한국어 메시지로 매핑해 표시한다.
 - Why it matters: 코드만 노출하면 사용자가 원인을 알 수 없어 클라이언트 문의로 이어진다.
 - Source: user
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 06
 - Validation: unmapped
 - Notes: 주요 코드 — -25003 WRONG_ID_OR_PASSWORD, -25044 OTP 필요, -26000 잘못된 API 사용, -26004 계정 상태 이상, RESTRICTED_OVERSEAS_LOGIN(해외 로그인 차단), PASSWORD_RESET_REQUIRED. 로그에는 마스킹 규칙(R010) 유지.
 
@@ -180,7 +180,7 @@ This file is the explicit capability and coverage contract for the project.
 - Description: 사용자가 API 모드를 선택할 때 "매 로그인마다 이메일 OTP 입력 필요, 자동 재로그인 불가"를 명시적으로 안내한다.
 - Why it matters: 클라이언트는 API 모드가 더 자동화된 방식이라고 기대했으나 실제로는 그 반대다. 기대치 불일치를 선택 시점에 해소한다.
 - Source: 실서버 검증
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 06
 - Validation: unmapped
 - Notes: 캡차 우회는 영구 제외(R013)이므로 제약을 없애는 것이 아니라 알리는 것이 목표.
 
@@ -191,7 +191,7 @@ This file is the explicit capability and coverage contract for the project.
 - Description: 신청 예정 시각 기준으로 토큰 잔여 수명을 확인해, 대기 중 만료가 예상되면 사전에 경고하고 재로그인을 유도한다.
 - Why it matters: API 모드는 OTP 때문에 자동 재로그인이 불가능하다. 대기 중 만료되면 이벤트를 통째로 놓친다. 사람이 개입할 시간을 미리 확보한다.
 - Source: user
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 07
 - Validation: unmapped
 - Notes: 기존 tryAutoRelogin은 브라우저 모드에서만 유효. JWT exp 클레임 파싱은 기존 isTokenExpired 재사용.
 
@@ -202,7 +202,7 @@ This file is the explicit capability and coverage contract for the project.
 - Description: API 모드에서도 이메일/비밀번호를 safeStorage로 암호화 저장해 재입력을 생략한다. OTP 코드는 저장하지 않는다.
 - Why it matters: 매번 OTP를 입력해야 하는 것만으로도 번거로운데 자격증명까지 재입력하면 실사용이 어렵다.
 - Source: user
-- Primary owning slice: unmapped
+- Primary owning slice: v0.3.0/Phase 07
 - Validation: unmapped
 - Notes: 기존 credentials.enc 메커니즘 재사용. safeStorage 불가 환경에서는 저장을 건너뛴다(기존 동작 유지).
 
@@ -215,7 +215,7 @@ This file is the explicit capability and coverage contract for the project.
 - Class: core-capability
 - Status: out-of-scope
 - Description: 추첨형(DRAW) 이벤트 지원
-- Why it matters: 이 프로젝트는 선착순(FIFO) 전용. 추첨 이벤트는 다른 UX 흐름이 필요.
+- Why it matters: 이 프로젝트는 선착순(FIFO) 전용. 추첨 이벤트는 다른 UX 흐름이 필요하다.
 - Source: user
 - Notes: 사용자가 명시적으로 범위에서 제외
 
@@ -274,18 +274,18 @@ This file is the explicit capability and coverage contract for the project.
 | R013 | anti-feature | out-of-scope | none | none | unmapped |
 | R014 | constraint | out-of-scope | none | none | unmapped |
 | R015 | constraint | out-of-scope | none | none | unmapped |
-| R016 | core-capability | active | unmapped | none | unmapped |
-| R017 | core-capability | active | unmapped | none | unmapped |
-| R018 | core-capability | active | unmapped | none | unmapped |
-| R019 | core-capability | active | unmapped | none | unmapped |
-| R020 | failure-visibility | active | unmapped | none | unmapped |
-| R021 | failure-visibility | active | unmapped | none | unmapped |
-| R022 | safety-guard | active | unmapped | none | unmapped |
-| R023 | core-capability | active | unmapped | none | unmapped |
+| R016 | core-capability | active | v0.3.0/Phase 06 | none | unmapped |
+| R017 | core-capability | active | v0.3.0/Phase 05 | none | unmapped |
+| R018 | core-capability | active | v0.3.0/Phase 05 | none | unmapped |
+| R019 | core-capability | active | v0.3.0/Phase 05 | none | unmapped |
+| R020 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
+| R021 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
+| R022 | safety-guard | active | v0.3.0/Phase 07 | none | unmapped |
+| R023 | core-capability | active | v0.3.0/Phase 07 | none | unmapped |
 
 ## Coverage Summary
 
 - Active requirements: 11 (기존 3 + v0.3.0 신규 8)
-- Mapped to slices: 3 (v0.3.0 신규 8건은 로드맵 생성 시 매핑)
+- Mapped to slices: 11 (전체 활성 요구사항이 phase에 매핑 완료 — v0.3.0: R016/R020/R021 → Phase 06, R017/R018/R019 → Phase 05, R022/R023 → Phase 07)
 - Validated: 7 (R001, R002, R003, R004, R005, R007, R009)
-- Unmapped active requirements: 8 (R016–R023, 로드맵 대기)
+- Unmapped active requirements: 0
