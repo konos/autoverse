@@ -1,7 +1,7 @@
 ---
 phase: 06
 slug: 06-ui
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-08-26
@@ -93,6 +93,26 @@ anywhere in this phase's new markup.
 | Modal backdrop (new — no existing token) | `rgba(0, 0, 0, 0.4)` via `::backdrop` pseudo-element on the native `<dialog>` | Standard scrim behind the notice modal. This is the only new color value introduced outside the existing `--color-*` token set; declare it as a plain CSS value on `dialog::backdrop`, do not add a new CSS custom property for a single use. |
 
 Accent reserved for: **active login-mode tab, modal confirm button, "브라우저 로그인으로 전환" button, form-input focus ring.** Nothing else may use `var(--color-primary)` in this phase's new markup.
+
+### Visual priority within the LoginPanel card
+
+Resolves the checker's Dimension 2 recommendation — implementers must not guess the reading order.
+Top-to-bottom, the card's attention order is:
+
+1. **Status row** (existing, unchanged) — "로그인 완료 / 미로그인" is the first thing scanned; it answers
+   "am I usable right now?"
+2. **Mode selector tabs** — the active tab is the only accent-blue element in the resting state, so it
+   is the strongest visual pull below the status row. This is intentional: the phase exists to make the
+   chosen method obvious.
+3. **Persistent inline notice banner** (API mode only) — sits directly under the tabs. Its warning
+   left-border accent gives it weight *without* accent blue, so it reads as a standing condition
+   attached to the tab above it, not as a call to action.
+4. **Credential form / logged-in button row** — the working area.
+5. **Failure message** — when present it appears in the existing `.error-message` slot and, being the
+   only destructive-colored text on screen, temporarily outranks everything except the status row.
+
+The env-locked badge deliberately does **not** compete: it is muted/neutral and reads as an annotation
+on the tab row rather than a separate focal point.
 
 ---
 
@@ -235,22 +255,79 @@ labels.
 
 ## UI Considerations
 
-Applicable state considerations resolved: 9 covered, 2 backstop, 0 unresolved.
+> Computed by `ui-consideration-probe.cjs` over 6 described surfaces (E1–E6) during
+> `/gsd-ui-phase 06` step 9.5, then resolved with the user. Element-kind confirmation:
+> no missed kinds (user-confirmed). **REPLACED on re-run — never appended.**
 
-| Category | Element(s) | Status | Resolution / Reason |
-|----------|------------|--------|---------------------|
-| error | Credential login form (`form`) | ✅ covered | The six-row failure→copy mapping in `## Copywriting Contract` above IS this state's resolution — every `LoginFailureReason` has a defined user-facing string and (where relevant) an affordance. |
-| loading | Login-mode selector tabs (`interactive-control`) | dismissed | `settings:set-login-mode` is a synchronous local `fs.writeFileSync`+rename completing in low single-digit ms; no loading affordance needed for the write itself. If the IPC call itself fails (renderer/main channel error, not a validation error), that is covered by the next row. |
-| error | Login-mode selector tabs (`interactive-control`) | 🧪 backstop | If `settings:set-login-mode` IPC rejects (e.g. `fs` write failure), the tab visually reverts to its prior selection and a short inline message reuses the `.error-message` slot: `설정 저장에 실패했습니다. 다시 시도해주세요.` No dedicated test exists yet for this path — held out as backstop; verify wires an explicit test or routes to `insufficient_spec → human_needed` at verify time. |
-| loading | Notice modal confirm button (`interactive-control`) | dismissed | `settings:ack-notice` is the same synchronous local-write pattern as above; no spinner state needed for a sub-5ms local write. |
-| error | Notice modal confirm button (`interactive-control`) | 🧪 backstop | If the ack-notice IPC call fails, the modal must NOT close (treat as if the user had not clicked confirm) and must show an inline error inside the dialog: `저장에 실패했습니다. 다시 시도해주세요.` No dedicated test exists yet — held out as backstop, same rationale as the row above. |
-| long-text | Notice modal body text (`interactive-control`) | ✅ covered | Both points are fixed, short (under ~90 Korean characters each), non-dynamic strings authored in this spec — no truncation/wrap logic needed, natural `<p>` wrapping inside the 480px app container is sufficient. |
-| overflow / long-text | Persistent inline notice banner (`static-content`) | ✅ covered | Single fixed sentence (~55 Korean characters), non-dynamic — fits on 1-2 lines inside the 480px card without truncation logic. |
-| long-text | `form-error` passthrough text (`form`, error sub-state) | ✅ covered | Explicit truncation rule in the Copywriting Contract's `form-error` row: trim, cap at 120 chars with `…`, full text still logged untruncated. |
-| empty | Credential login form (`form`) | dismissed | Pre-existing, unchanged this phase — submit button already `disabled` until both fields are non-empty (existing `!email || !password` guard). |
-| loading | Credential login form (`form`) | dismissed | Pre-existing, unchanged — existing `credLoading` state and "로그인 중..." button label already cover this. |
-| partial | Credential login form (`form`) | dismissed | Pre-existing, unchanged — no new partial-fill behavior introduced. |
-| zero-one-many | — | n/a | No list/collection element exists in this phase's scope. |
+**Coverage: 38 applicable · 22 resolved (explicit) · 16 dismissed · 0 backstop · 0 unresolved.**
+
+### E1 — Login mode selector tabs (`.login-mode-tabs`)
+
+| Category | Status | Resolution / Reason |
+|----------|--------|---------------------|
+| empty | dismissed | Options are two hardcoded tabs; an empty state cannot exist. |
+| loading | dismissed | `settings:set-login-mode` is a local synchronous write completing in single-digit ms; no spinner state. |
+| error | ✅ covered | If the IPC call rejects (fs write failure), the tab reverts to its prior selection and the existing `.error-message` slot shows `설정 저장에 실패했습니다. 다시 시도해주세요.` The setting must NOT appear changed when the write failed. **Requires an explicit Wave 0 test** (user decision — upgraded from backstop). |
+| populated | ✅ covered | Exactly one tab is active at all times: active tab uses `.btn-primary`, the other `.btn-secondary` (existing idiom in `LoginPanel.tsx`). |
+| partial | dismissed | Single exclusive choice — there is no partially-selected state. |
+| overflow | dismissed | Two fixed short Korean labels inside the 480px `.app` container; ample room. |
+| zero-one-many | dismissed | Always exactly two options; the set is not data-driven. |
+| long-text | dismissed | Labels are fixed authored strings, never dynamic. |
+
+### E2 — Locked-by-env badge (D-06)
+
+| Category | Status | Resolution / Reason |
+|----------|--------|---------------------|
+| empty | ✅ covered | When `AUTOVERSE_LOGIN_MODE` is unset, neither the badge nor its detail text renders at all. No placeholder, no reserved empty space — absence is the correct normal state. |
+| loading | dismissed | The badge derives from the already-resolved mode; there is no async lookup behind it. |
+| error | dismissed | No fallible operation backs this surface. |
+| populated | ✅ covered | Badge reads exactly `환경변수로 고정됨`, followed by detail text naming the **currently applied mode label** (`API 로그인` / `브라우저 로그인` — never the raw env string). Both tabs render `disabled`. |
+| partial | dismissed | The badge renders in full or not at all; no intermediate state. |
+| overflow | ✅ covered | Detail text renders as a block below the tab row and wraps naturally (`word-break: keep-all` for Korean). **Truncation is forbidden here** — an ellipsis could hide which mode is actually in effect, which would defeat D-06's entire purpose. |
+| zero-one-many | dismissed | Zero or one badge; a plural case does not exist. |
+| long-text | ✅ covered | Same rule as overflow. The interpolated mode label is one of two fixed strings, so the maximum length is bounded and known. |
+
+### E3 — API mode notice modal (`ApiModeNoticeModal`, native `<dialog>`)
+
+| Category | Status | Resolution / Reason |
+|----------|--------|---------------------|
+| loading | dismissed | `settings:ack-notice` is the same local synchronous write; no spinner. |
+| error | ✅ covered | If the ack write fails, the dialog **must not close** and must not switch the mode — treat it as if confirm was never clicked — and show `저장에 실패했습니다. 다시 시도해주세요.` inside the dialog. **Requires an explicit Wave 0 test** (user decision — upgraded from backstop). |
+| overflow | ✅ covered | The body region gets a `max-height` plus `overflow-y: auto`; the button row sits **outside** the scroll area and stays pinned. `main.ts` opens at 1024×768 but sets no `minHeight`, so the window can be shrunk arbitrarily — the confirm button must remain reachable at any window size, otherwise a blocking modal could trap the user. (User decision; the alternative of setting `minHeight` on the BrowserWindow was rejected as out of phase scope.) |
+| long-text | ✅ covered | Both points are fixed, non-dynamic strings under ~90 Korean characters. Natural `<p>` wrapping; no truncation logic. |
+
+### E4 — Persistent inline notice banner
+
+| Category | Status | Resolution / Reason |
+|----------|--------|---------------------|
+| loading | dismissed | Static text; nothing async behind it. |
+| error | dismissed | No fallible operation backs this surface. |
+| overflow | ✅ covered | One fixed sentence (~55 Korean characters) wrapping to 1–2 lines inside the 480px card. No ellipsis, no dismiss button — per D-09 it must stay visible for as long as API mode is active. |
+| long-text | ✅ covered | Same rule as overflow; the string is authored, not dynamic. |
+
+### E5 — Login failure message region (`.error-message`, `role="alert"`)
+
+| Category | Status | Resolution / Reason |
+|----------|--------|---------------------|
+| empty | ✅ covered | When there is no failure the region is not rendered at all (keep the existing `{credMessage && …}` conditional). No empty box, no reserved height. |
+| loading | dismissed | The in-flight state belongs to E6 (`credLoading` / `로그인 중...`), not to this region. |
+| error | ✅ covered | The six-row failure→copy table in `## Copywriting Contract` **is** this state's contract (R020). All six render in this one slot with `role="alert"`. |
+| populated | ✅ covered | One sentence, optionally followed by a masked identifier chip (`.token-preview` style) and optionally a `브라우저 로그인으로 전환` action button. |
+| partial | ✅ covered | Mapped reasons (`captcha`, `timeout`) render the sentence with **no** identifier chip. A missing identifier is the correct rendering, not a defect — do not print `(식별자: undefined)`. |
+| overflow | ✅ covered | Only the `form-error` passthrough is dynamic: trim, cap at 120 characters with a trailing `…`, and still pass through `maskSensitive()`. The untruncated text goes to the log panel. |
+| zero-one-many | ✅ covered | At most one message is ever shown. A new failure **replaces** the previous message; failures never accumulate into a list. |
+| long-text | ✅ covered | Same rule as overflow — the 120-character cap is the single length contract for this region. |
+
+### E6 — Credential login form (pre-existing, unchanged this phase)
+
+| Category | Status | Resolution / Reason |
+|----------|--------|---------------------|
+| empty | ✅ covered | Submit stays `disabled` while either field is empty (existing `!email \|\| !password` guard). Unchanged by this phase. |
+| loading | ✅ covered | While `credLoading`, the button label becomes `로그인 중...` and carries `aria-busy`. Existing behavior, preserved. |
+| error | ✅ covered | Delegated entirely to E5 — the form does not get its own error region. |
+| partial | ✅ covered | One field filled still leaves submit `disabled`; same guard as empty. Unchanged. |
+| overflow | dismissed | Single-line `<input>` elements; the browser's native value scrolling applies. |
+| long-text | dismissed | Input values are not a display surface here — the password is masked and the email is single-line. |
 
 <!-- Status vocabulary (locked by probe-core projectTruths):
      ✅ covered   → a plain truth string lifted into must_haves.truths
@@ -272,11 +349,25 @@ Applicable state considerations resolved: 9 covered, 2 backstop, 0 unresolved.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+Verified by `gsd-ui-checker` on 2026-08-26.
 
-**Approval:** pending
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS — 1 FLAG (visual priority unspecified), **resolved** by the
+      "Visual priority within the LoginPanel card" subsection added to `## Color`
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+
+Project-specific correctness checks (all PASS):
+1. No surviving "매 로그인마다 이메일 OTP" claim (disproven — HAR, zero OTP calls)
+2. No OTP input screen specified (D-02 deletes it)
+3. Captcha failure copy explains the security check and offers browser-mode switch; never says
+   to check email
+4. Env-locked selector state specified (D-06) — UI cannot display a value that differs from
+   actual behavior
+5. D-14 identifier display reconciled with R010 — `maskSensitive()` mandated at the call site
+   because `CredentialLoginResult.message` bypasses `logService`'s automatic masking
+6. Copywriting Contract holds final Korean strings, no placeholders
+
+**Approval:** approved 2026-08-26 (0 blocking, 1 FLAG resolved in-spec)
