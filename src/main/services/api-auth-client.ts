@@ -217,7 +217,7 @@ export class ApiAuthClient {
       "ApiAuthClient",
       `exchangeForService departure=${departureServiceId} target=${targetServiceId}`,
     );
-    return this.postAccount<AccountTokens>(
+    const raw = await this.postAccount<Record<string, unknown>>(
       "/v2/auth/token/by-access-token",
       { targetServiceId },
       {
@@ -225,6 +225,30 @@ export class ApiAuthClient {
         "X-ACC-SERVICE-ID": departureServiceId,
       },
     );
+
+    // Observability (Task 3 — A3): by-access-token 200 응답 스키마는 한 번도
+    // 실계정으로 관측된 적이 없다. rung2 가 실제로 돌면 이 한 줄이 그 미지수의
+    // 답이 된다. 키 이름과 존재여부/길이만 남기고 토큰 값 자체는 남기지 않는다.
+    const keys = raw && typeof raw === "object" ? Object.keys(raw) : [];
+    const accessTokenValue = raw && typeof raw === "object" ? raw.accessToken : undefined;
+    const hasAccessToken = typeof accessTokenValue === "string" && accessTokenValue.length > 0;
+    logService.info(
+      "ApiAuthClient",
+      `exchangeForService response keys=[${keys.join(",")}] hasAccessToken=${hasAccessToken} accessTokenLen=${hasAccessToken ? (accessTokenValue as string).length : 0}`,
+    );
+
+    if (!hasAccessToken) {
+      logService.error(
+        "ApiAuthClient",
+        "exchangeForService: accessToken missing or not a non-empty string — refusing to return a malformed exchange result",
+      );
+      throw new ApiAuthError(
+        "EXCHANGE_RESPONSE_MALFORMED",
+        "by-access-token 응답에 accessToken 이 없습니다 — 서버 응답 스키마가 예상과 다릅니다",
+      );
+    }
+
+    return raw as unknown as AccountTokens;
   }
 
   async probeFaneventToken(token: string): Promise<number | null> {

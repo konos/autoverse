@@ -42,6 +42,14 @@ const SENSITIVE_PATTERNS: Array<[RegExp, (match: string, key: string, val: strin
   [/(password["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
   [/(otpCode["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
   [/(applyToken["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
+  // Phase 05 재설계 — account token ladder spike/exchange 경로에서 새로 로그에
+  // 등장할 수 있는 토큰 필드 3종. otpSessionId 는 05-01 실측상 세션 식별자가
+  // 아니라 reCAPTCHA Enterprise 토큰(2489자)을 담는 자리이므로 자격증명급
+  // 비밀로 취급한다. 키 뒤에 곧바로 :/= 가 오는 경우만 매칭되므로
+  // `otpSessionIdLen=36`/`hasOtpSessionId=true` 같은 진단 로그는 매칭되지 않는다.
+  [/(accessToken["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
+  [/(refreshToken["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
+  [/(otpSessionId["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
   [/(phoneNumber["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskPhone(v)}`],
   [/(birthDate["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskBirthDate(v)}`],
   [/(membershipNumber["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskMembershipNumber(v)}`],

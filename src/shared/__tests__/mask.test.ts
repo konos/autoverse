@@ -149,12 +149,46 @@ describe("maskSensitive", () => {
     expect(result).not.toContain("Bearer abcdefghijklmnopqrst1234567890uvwxyz");
   });
 
-  it("masks password value in a serialized object string (email/otpSessionId preserved)", () => {
-    const text = '{"email":"a@b.com","password":"SuperSecret123!","otpSessionId":"abc"}';
+  it("masks password value in a serialized object string (email preserved)", () => {
+    const text = '{"email":"a@b.com","password":"SuperSecret123!"}';
     const result = maskSensitive(text);
     expect(result).not.toContain("SuperSecret123!");
     expect(result).toContain('"email":"a@b.com"');
-    expect(result).toContain('"otpSessionId":"abc"');
+  });
+
+  // Phase 05 재설계: 05-01 실측 결과 otpSessionId 필드는 세션 식별자가 아니라
+  // reCAPTCHA Enterprise 토큰(2489자)을 담는 자리임이 드러났다. 위 테스트가
+  // 예전에 검증하던 "otpSessionId 는 보존된다" 가정은 더 이상 유효하지 않다 —
+  // 아래에서 정반대(마스킹됨)를 검증한다.
+  it("masks accessToken value", () => {
+    const long = "b".repeat(60);
+    const text = `{"accessToken":"${long}"}`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(long);
+  });
+
+  it("masks refreshToken value", () => {
+    const long = "c".repeat(60);
+    const text = `{"refreshToken":"${long}"}`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(long);
+  });
+
+  it("masks otpSessionId value — 05-01 실측상 reCAPTCHA Enterprise 토큰(2489자)이므로 자격증명급 비밀로 취급", () => {
+    const long = "d".repeat(60);
+    const text = `{"otpSessionId":"${long}"}`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(long);
+  });
+
+  it("진단 로그(accountTokenLadderSpike)는 마스킹으로 훼손되지 않는다", () => {
+    const text = "accountTokenLadderSpike: tokenSource=cookie ladderSource=direct fanId=123";
+    expect(maskSensitive(text)).toBe(text);
+  });
+
+  it("키 이름 언급(otpSessionIdLen=, hasOtpSessionId=)은 값 노출이 아니므로 훼손되지 않는다", () => {
+    const text = "requestOtpSession response keys=[otpSessionId] hasOtpSessionId=true otpSessionIdLen=36";
+    expect(maskSensitive(text)).toBe(text);
   });
 
   it("masks otpCode value", () => {

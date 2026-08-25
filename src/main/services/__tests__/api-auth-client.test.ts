@@ -233,6 +233,41 @@ describe("ApiAuthClient exchange", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers["X-ACC-SERVICE-ID"]).toBe("account");
   });
+
+  it("exchange 관측성: 정상 응답이면 응답 키 목록과 hasAccessToken/accessTokenLen 이 로그로 남고 토큰 값 자체는 남지 않는다 (A3)", async () => {
+    const fetchFn = makeFetchQueue([
+      { status: 200, body: { accessToken: "exchanged-tok-value", serviceUserId: "u1" } },
+    ]);
+    const client = new ApiAuthClient(fetchFn);
+
+    const result = await client.exchangeForService("account-tok");
+
+    expect(result.accessToken).toBe("exchanged-tok-value");
+    const infoMock = logService.info as unknown as ReturnType<typeof vi.fn>;
+    const allInfoArgs = infoMock.mock.calls.map((c) => JSON.stringify(c)).join("\n");
+    expect(allInfoArgs).toContain("exchangeForService response keys=");
+    expect(allInfoArgs).toContain("hasAccessToken=true");
+    expect(allInfoArgs).toContain("accessTokenLen=19");
+    expect(allInfoArgs).not.toContain("exchanged-tok-value");
+  });
+
+  it("exchange 방어: accessToken 이 없으면 EXCHANGE_RESPONSE_MALFORMED 로 즉시 실패한다 (조용한 undefined 전파 금지)", async () => {
+    const fetchFn = makeFetchQueue([{ status: 200, body: { serviceUserId: "u1" } }]);
+    const client = new ApiAuthClient(fetchFn);
+
+    await expect(client.exchangeForService("account-tok")).rejects.toMatchObject({
+      code: "EXCHANGE_RESPONSE_MALFORMED",
+    });
+  });
+
+  it("exchange 방어: accessToken 이 빈 문자열이면 EXCHANGE_RESPONSE_MALFORMED 로 실패한다", async () => {
+    const fetchFn = makeFetchQueue([{ status: 200, body: { accessToken: "" } }]);
+    const client = new ApiAuthClient(fetchFn);
+
+    await expect(client.exchangeForService("account-tok")).rejects.toMatchObject({
+      code: "EXCHANGE_RESPONSE_MALFORMED",
+    });
+  });
 });
 
 // ── ladder ───────────────────────────────────────────────────────────────
