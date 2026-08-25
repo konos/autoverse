@@ -5,6 +5,8 @@ import * as path from "path";
 import { maskToken } from "../../shared/mask";
 import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/types";
 import { logService } from "./log-service";
+import { ApiAuthClient, ApiAuthError, type AccountTokens } from "./api-auth-client";
+import { resolveLoginMode } from "../login-mode";
 
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
@@ -38,6 +40,10 @@ export class AuthService extends EventEmitter {
   // Headless login state
   private headlessWindow: BrowserWindow | null = null;
   private pendingCredentials: { email: string; password: string } | null = null;
+
+  // API login state (Phase 05 — pure HTTP login path)
+  private apiClient = new ApiAuthClient();
+  private apiLoginState: { email: string; password: string; otpSessionId: string } | null = null;
 
   get token(): string | null {
     return this.cachedToken;
@@ -156,6 +162,11 @@ export class AuthService extends EventEmitter {
   // ── Auto re-login on token expiry ───────────────────────────────────────
 
   private async tryAutoRelogin(): Promise<boolean> {
+    if (resolveLoginMode() === "api") {
+      logService.info("AuthService", "tryAutoRelogin: API 모드는 자동 재로그인 불가 — 재로그인 안내로 대체");
+      return false;
+    }
+
     if (this.autoReloginInProgress) return false;
 
     const creds = this.loadCredentials();
@@ -501,6 +512,122 @@ export class AuthService extends EventEmitter {
     } catch (err) {
       const msg = `OTP 오류: ${err instanceof Error ? err.message : String(err)}`;
       logService.error("AuthService", msg);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    }
+  }
+
+  // ── API login (Phase 05 — pure HTTP path, no headless BrowserWindow) ────
+
+  /**
+   * Pure HTTP credential login: otp-sessions → by-credentials.
+   * Mirrors credentialLogin's emission contract so the renderer's existing
+   * LoginPanel handling (result.needOtp) works unchanged.
+   */
+  async credentialLoginApi(email: string, password: string): Promise<CredentialLoginResult> {
+    logService.info("AuthService", "credentialLoginApi: starting");
+    this._emit({ type: "credential-login-progress", message: "API 로그인 시도 중...", timestamp: Date.now() });
+
+    let otpSessionId: string;
+    try {
+      const otpSession = await this.apiClient.requestOtpSession(email);
+      otpSessionId = otpSession.otpSessionId;
+    } catch (err) {
+      const msg = err instanceof ApiAuthError ? err.message : `로그인 오류: ${String(err)}`;
+      logService.error("AuthService", `credentialLoginApi: requestOtpSession failed: ${msg}`);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    }
+
+    this.apiLoginState = { email, password, otpSessionId };
+
+    try {
+      const tokens = await this.apiClient.loginWithCredentials(email, password, otpSessionId);
+      // Rare: server issued a token without requiring OTP.
+      return this.finishApiLogin(tokens);
+    } catch (err) {
+      if (err instanceof ApiAuthError && err.code === "-25044") {
+        this._emit({
+          type: "otp-required",
+          message: "이메일 OTP 인증이 필요합니다. 이메일을 확인해주세요.",
+          timestamp: Date.now(),
+        });
+        return { success: false, needOtp: true, message: "이메일로 발송된 6자리 코드를 입력해주세요." };
+      }
+
+      this.apiLoginState = null;
+      const msg = err instanceof ApiAuthError ? err.message : `로그인 오류: ${String(err)}`;
+      logService.error("AuthService", `credentialLoginApi: loginWithCredentials failed: ${msg}`);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    }
+  }
+
+  /**
+   * Pure HTTP OTP verification: by-credentials-with-otp → acquireFaneventToken.
+   */
+  async submitOtpApi(otpCode: string): Promise<CredentialLoginResult> {
+    if (!this.apiLoginState) {
+      return { success: false, message: "로그인 세션이 없습니다. 다시 로그인해주세요." };
+    }
+
+    const { email, password, otpSessionId } = this.apiLoginState;
+    logService.info("AuthService", "submitOtpApi: verifying OTP");
+    this._emit({ type: "credential-login-progress", message: "OTP 인증 중...", timestamp: Date.now() });
+
+    let tokens: AccountTokens;
+    try {
+      tokens = await this.apiClient.verifyOtp(email, password, otpSessionId, otpCode);
+    } catch (err) {
+      this.apiLoginState = null;
+      const msg = err instanceof ApiAuthError ? err.message : `OTP 인증 오류: ${String(err)}`;
+      logService.error("AuthService", `submitOtpApi: verifyOtp failed: ${msg}`);
+      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      return { success: false, message: msg };
+    }
+
+    return this.finishApiLogin(tokens);
+  }
+
+  /**
+   * Shared tail of both API login entry points: acquire the fanevent token
+   * ladder and only then promote the login to "success". Account-login
+   * success alone never sets cachedToken — Pitfall 5 / T-05-02.
+   */
+  private async finishApiLogin(tokens: AccountTokens): Promise<CredentialLoginResult> {
+    this._emit({ type: "credential-login-progress", message: "팬이벤트 토큰 확보 중...", timestamp: Date.now() });
+
+    try {
+      const { token, source, fanId } = await this.apiClient.acquireFaneventToken(tokens.accessToken);
+
+      this.cachedToken = token;
+      this.cachedFanId = fanId;
+
+      if (this.apiLoginState) {
+        this.saveCredentials(this.apiLoginState.email, this.apiLoginState.password);
+      }
+      this.apiLoginState = null;
+
+      logService.info("AuthService", `credentialLoginApi: login-success source=${source} token=${maskToken(token)}`);
+      this._emit({
+        type: "login-success",
+        message: `API 로그인 성공 (${source}): ${maskToken(token)}`,
+        timestamp: Date.now(),
+      });
+      this._emit({
+        type: "token-validated",
+        message: `fanId=${fanId} 검증 성공`,
+        timestamp: Date.now(),
+      });
+
+      return { success: true };
+    } catch (err) {
+      this.apiLoginState = null;
+      const msg =
+        err instanceof ApiAuthError
+          ? `계정 로그인은 성공했지만 팬이벤트 토큰 확보에 실패했습니다: ${err.message}`
+          : `팬이벤트 토큰 확보 오류: ${String(err)}`;
+      logService.error("AuthService", `finishApiLogin: ${msg}`);
       this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
       return { success: false, message: msg };
     }

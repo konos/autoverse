@@ -4,6 +4,7 @@ import { authService } from "./services/auth-service";
 import { profileStore } from "./services/profile-store";
 import { applyEngine } from "./services/apply-engine";
 import { logService } from "./services/log-service";
+import { resolveLoginMode } from "./login-mode";
 import type { AuthEvent, ApplyEvent, Profile, LogEntry } from "../shared/types";
 
 let mainWindowRef: BrowserWindow | null = null;
@@ -45,14 +46,18 @@ export function registerIpcHandlers(): void {
     await authService.login(mainWindowRef);
   });
 
-  // auth:credential-login — email/password login via API
+  // auth:credential-login — email/password login (mode-dependent: API vs headless browser)
   ipcMain.handle("auth:credential-login", async (_evt, email: string, password: string) =>
-    authService.credentialLogin(email, password)
+    resolveLoginMode() === "api"
+      ? authService.credentialLoginApi(email, password)
+      : authService.credentialLogin(email, password)
   );
 
-  // auth:submit-otp — submit OTP code for credential login
+  // auth:submit-otp — submit OTP code for credential login (mode-dependent)
   ipcMain.handle("auth:submit-otp", async (_evt, otpCode: string) =>
-    authService.submitOtp(otpCode)
+    resolveLoginMode() === "api"
+      ? authService.submitOtpApi(otpCode)
+      : authService.submitOtp(otpCode)
   );
 
   // auth:validate-token — calls GET /fans/me
