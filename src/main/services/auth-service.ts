@@ -11,8 +11,11 @@ import {
   pickAccountTokenCookie,
   summarizeCookies,
   describeTokenShape,
+  extractAccessTokenFromResponseBody,
   type CookieLike,
 } from "./account-token-capture";
+
+const BY_CREDENTIALS_PATH = "/v4/auth/token/by-credentials";
 
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
@@ -265,6 +268,7 @@ export class AuthService extends EventEmitter {
       },
     });
     this.headlessWindow = win;
+    this.attachAccountTokenCapture(win);
 
     try {
       await win.loadURL(LOGIN_URL);
@@ -732,6 +736,96 @@ export class AuthService extends EventEmitter {
       this.headlessWindow.close();
     }
     this.headlessWindow = null;
+  }
+
+  /**
+   * CDP 폴백 배선 (D-02 경로 B) — `by-credentials` 200 응답에서 `accessToken`을
+   * 캡처해 `this.accountTokenCapture` 핸들에 보관한다. 쿠키에 계정 토큰이 없을
+   * 때만 `runAccountTokenLadderSpike()`가 이 핸들을 읽는다. attach 실패는
+   * 쿠키 경로만으로 계속 진행할 수 있도록 예외를 삼키고 경고만 남긴다
+   * (Pitfall 2 — "시도조차 안 함"과 "조용한 캡처 실패"를 로그에서 구분).
+   */
+  private attachAccountTokenCapture(win: BrowserWindow): void {
+    let capturedAccessToken: string | null = null;
+    let sawResponse = false;
+    let detachReason: string | null = null;
+    let pendingRequestId: string | null = null;
+
+    this.accountTokenCapture = {
+      getCapturedAccessToken: () => capturedAccessToken,
+      get sawResponse() {
+        return sawResponse;
+      },
+      get detachReason() {
+        return detachReason;
+      },
+    };
+
+    const dbg = win.webContents.debugger;
+
+    try {
+      dbg.attach("1.3");
+    } catch (err) {
+      logService.warn(
+        "AuthService",
+        `accountTokenCapture(CDP): attach failed=${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+    logService.info("AuthService", "accountTokenCapture(CDP): attach ok");
+
+    dbg.on("detach", (_event, reason) => {
+      detachReason = reason;
+      logService.warn("AuthService", `accountTokenCapture(CDP): detached reason=${reason}`);
+    });
+
+    dbg.on("message", (_event, method, params) => {
+      if (method === "Network.responseReceived") {
+        const url = params?.response?.url as string | undefined;
+        if (url && url.includes(BY_CREDENTIALS_PATH)) {
+          pendingRequestId = params?.requestId as string;
+          sawResponse = true;
+          logService.info(
+            "AuthService",
+            `accountTokenCapture(CDP): responseSeen requestId=${pendingRequestId} status=${params?.response?.status}`,
+          );
+        }
+        return;
+      }
+
+      if (method === "Network.loadingFinished" && params?.requestId === pendingRequestId && pendingRequestId) {
+        const requestId = pendingRequestId;
+        pendingRequestId = null;
+        dbg
+          .sendCommand("Network.getResponseBody", { requestId })
+          .then((result: { body: string; base64Encoded: boolean }) => {
+            const rawBody = result.base64Encoded
+              ? Buffer.from(result.body, "base64").toString("utf-8")
+              : result.body;
+            const token = extractAccessTokenFromResponseBody(rawBody);
+            if (token) {
+              capturedAccessToken = token;
+              logService.info(
+                "AuthService",
+                `accountTokenCapture(CDP): accessToken captured ${describeTokenShape(token)}`,
+              );
+            }
+          })
+          .catch((err: unknown) => {
+            logService.error(
+              "AuthService",
+              `accountTokenCapture(CDP): getResponseBody failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+      }
+    });
+
+    dbg.sendCommand("Network.enable").catch((err: unknown) => {
+      logService.warn(
+        "AuthService",
+        `accountTokenCapture(CDP): Network.enable failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   /**

@@ -69,3 +69,27 @@ export function describeTokenShape(token: string): string {
   const parts = token.split(".").length;
   return `parts=${parts} len=${token.length} looksLikeJwt=${parts === 3}`;
 }
+
+/**
+ * Parses a CDP-captured `by-credentials` response body and extracts
+ * `accessToken` if present and non-empty. Never throws — malformed input
+ * (invalid JSON, wrong shape, wrong type, empty string) all resolve to
+ * `null` rather than propagating an exception into the CDP message
+ * handler that calls this.
+ */
+export function extractAccessTokenFromResponseBody(body: string): string | null {
+  if (!body) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (parsed && typeof parsed === "object" && "accessToken" in parsed) {
+    const value = (parsed as Record<string, unknown>).accessToken;
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return null;
+}

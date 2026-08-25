@@ -340,4 +340,89 @@ describe("AuthService.runAccountTokenLadderSpike", () => {
 
     expect(after).toBe(before);
   });
+
+  it("CDP 후보만 있고 쿠키 후보가 없으면 tokenSource=cdp 로 사다리를 태운다", async () => {
+    cookieFixtureBox.current = [];
+    const fetchFn = makeFetchQueue([{ status: 200, body: { fanId: 55 } }]);
+    const service = new AuthService(new ApiAuthClient(fetchFn));
+    (service as unknown as { accountTokenCapture: unknown }).accountTokenCapture = {
+      getCapturedAccessToken: () => "b".repeat(150),
+      sawResponse: true,
+      detachReason: null,
+    };
+
+    const result = await service.runAccountTokenLadderSpike("test");
+
+    expect(result.verdict).toBe("pass");
+    expect(result.tokenSource).toBe("cdp");
+    expect(result.ladderSource).toBe("direct");
+    expect(result.fanId).toBe(55);
+  });
+
+  it("쿠키 후보와 CDP 후보가 둘 다 있으면 쿠키가 우선한다", async () => {
+    cookieFixtureBox.current = [
+      { name: "acc_token", value: LONG_TOKEN, domain: "account.weverse.io" },
+    ];
+    const fetchFn = makeFetchQueue([{ status: 200, body: { fanId: 77 } }]);
+    const service = new AuthService(new ApiAuthClient(fetchFn));
+    (service as unknown as { accountTokenCapture: unknown }).accountTokenCapture = {
+      getCapturedAccessToken: () => "cdp-should-not-be-used".padEnd(150, "z"),
+      sawResponse: true,
+      detachReason: null,
+    };
+
+    const result = await service.runAccountTokenLadderSpike("test");
+
+    expect(result.tokenSource).toBe("cookie");
+  });
+});
+
+// ── attachAccountTokenCapture (CDP 배선, Task 2) ────────────────────────────
+
+describe("AuthService.attachAccountTokenCapture", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeFakeWin(overrides?: Partial<{ attach: () => void }>) {
+    return {
+      webContents: {
+        debugger: {
+          attach: overrides?.attach ?? vi.fn(),
+          on: vi.fn(),
+          sendCommand: vi.fn(async () => ({})),
+        },
+      },
+    };
+  }
+
+  it("attach 실패는 예외를 던지지 않고 경고 로그 후 정상 반환한다 — 쿠키 경로만으로 계속 진행", () => {
+    const service = new AuthService();
+    const fakeWin = makeFakeWin({
+      attach: () => {
+        throw new Error("Another debugger is already attached to the WebContents");
+      },
+    });
+
+    expect(() => {
+      (service as unknown as { attachAccountTokenCapture: (win: unknown) => void }).attachAccountTokenCapture(
+        fakeWin,
+      );
+    }).not.toThrow();
+  });
+
+  it("attach 성공 시 Network.enable 을 호출하고 message/detach 리스너를 등록한다", () => {
+    const service = new AuthService();
+    const fakeWin = makeFakeWin();
+
+    (service as unknown as { attachAccountTokenCapture: (win: unknown) => void }).attachAccountTokenCapture(
+      fakeWin,
+    );
+
+    const dbg = fakeWin.webContents.debugger;
+    expect(dbg.attach).toHaveBeenCalledWith("1.3");
+    expect(dbg.on).toHaveBeenCalledWith("detach", expect.any(Function));
+    expect(dbg.on).toHaveBeenCalledWith("message", expect.any(Function));
+    expect(dbg.sendCommand).toHaveBeenCalledWith("Network.enable");
+  });
 });

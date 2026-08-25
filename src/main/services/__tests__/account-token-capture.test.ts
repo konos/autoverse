@@ -9,6 +9,7 @@ import {
   pickAccountTokenCookie,
   summarizeCookies,
   describeTokenShape,
+  extractAccessTokenFromResponseBody,
   type CookieLike,
 } from "../account-token-capture";
 
@@ -105,5 +106,34 @@ describe("describeTokenShape", () => {
     expect(result).not.toContain("secretpart1");
     expect(result).not.toContain("secretpart2");
     expect(result).not.toContain("secretpart3");
+  });
+});
+
+describe("extractAccessTokenFromResponseBody", () => {
+  it("정상: accessToken 이 있으면 그 값을 반환한다", () => {
+    expect(
+      extractAccessTokenFromResponseBody('{"accessToken":"abc","refreshToken":"def"}'),
+    ).toBe("abc");
+  });
+
+  it("키없음: accessToken 필드가 없으면 null", () => {
+    expect(extractAccessTokenFromResponseBody('{"refreshToken":"def"}')).toBeNull();
+  });
+
+  it("빈문자열: accessToken 이 빈 문자열이면 null", () => {
+    expect(extractAccessTokenFromResponseBody('{"accessToken":""}')).toBeNull();
+  });
+
+  it("비문자열: accessToken 이 문자열이 아니면 null", () => {
+    expect(extractAccessTokenFromResponseBody('{"accessToken":123}')).toBeNull();
+  });
+
+  it("비JSON: 파싱 불가능한 입력은 예외를 던지지 않고 null", () => {
+    expect(() => extractAccessTokenFromResponseBody("not json")).not.toThrow();
+    expect(extractAccessTokenFromResponseBody("not json")).toBeNull();
+  });
+
+  it("빈입력: 빈 문자열은 null", () => {
+    expect(extractAccessTokenFromResponseBody("")).toBeNull();
   });
 });
