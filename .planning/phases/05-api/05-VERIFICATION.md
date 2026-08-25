@@ -1,13 +1,17 @@
 ---
 phase: 05-api
 verified: 2026-08-25T10:08:18Z
-status: human_needed
+status: passed
 score: 20/21 must-haves verified
 behavior_unverified: 1
 overrides_applied: 0
 human_verification:
+
   - test: "Confirm ApplyEngine actually submits an application end-to-end using a token obtained through the account-token ladder (rung1/rung2), not just the existing browser-mode we2_access_token."
     expected: "ApplyEngine's POST-application flow succeeds unchanged when authService.token holds a ladder-derived account-domain token (e.g. the observed accountapi.weverse.io `rt` cookie value), exactly as ROADMAP Phase 05 Success Criteria 3's second clause requires ('ApplyEngine이 이 토큰을 코드 변경 없이 그대로 사용해 신청을 수행할 수 있다')."
+    resolution: "resolved-by-uat"
+    resolved_at: "2026-08-25"
+    resolved_via: "05-UAT.md test 5 — explicit human sign-off accepting shape-level reasoning as sufficient (the second of the two resolution paths this entry itself allowed). No live apply was performed; the residual behavioural risk is carried into D-04."
     why_human: "05-SPIKE-RESULT.md §4 explicitly states this was judged only at the shape/type level (both sources are opaque strings) and was never wired end-to-end — the spike is read-only by design and did not overwrite authService.token or trigger an apply. The only automated evidence is the pre-existing apply-engine.test.ts regression suite (17/17), which does not exercise this specific token source. No test or log evidence proves ApplyEngine actually accepts this token in a live apply call. This is a real risk to carry into the Phase 06/07 product-path decision (D-04), not merely a spike loose end already flagged for later action."
 ---
 
@@ -15,7 +19,7 @@ human_verification:
 
 **Phase Goal:** 이미 동작 중인 헤드리스 로그인에서 계정 토큰을 확보해 account → 팬이벤트 토큰 사다리(R019)가 실계정에서 성립하는지 1회 관찰로 판정하고, 반증된 로그인 계약을 문서에서 제거한다.
 **Verified:** 2026-08-25T10:08:18Z
-**Status:** human_needed
+**Status:** passed (human verification resolved via 05-UAT.md test 5 — see frontmatter `resolution`)
 **Re-verification:** No — initial verification
 
 ## Context Notes Applied

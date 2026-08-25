@@ -24,8 +24,8 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 **Goal:** 사용자가 로그인 방식을 API 통신과 브라우저 중 선택할 수 있게 하고, 각 방식의 제약을 앱이 명확히 안내한다.
 
 **Target features:**
-- API 로그인 경로 신규 구현 — `otp-sessions` → `by-credentials` → `by-credentials-with-otp` 3단계
-- 이메일 OTP 입력 흐름 — API 모드는 매 로그인마다 OTP 필수
+- ~~API 로그인 경로 신규 구현 — `otp-sessions` → `by-credentials` → `by-credentials-with-otp` 3단계~~ **[VOID 2026-08-25]** HAR 실측상 3단계 순서는 존재하지 않는다 (아래 계약 표 참조). 실제 경로는 `by-credentials` 단독 호출이며 reCAPTCHA Enterprise 토큰이 필수 입력이다
+- ~~이메일 OTP 입력 흐름 — API 모드는 매 로그인마다 OTP 필수~~ **[VOID 2026-08-25]** HAR 호출 0건 — OTP 단계 자체가 실제 로그인 흐름에 없다 (R018 보류). 근거: `.planning/phases/05-api/05-01-SUMMARY.md`
 - 토큰 교환 — account 토큰(`wa_access_token`) → 팬이벤트용 `we2_access_token`
 - 방식 선택 UI — 브라우저 모드 기본값, API는 선택 옵션
 - 토큰 만료 사전 경고 — 신청 시각 전 토큰 수명 체크 후 재로그인 유도
@@ -69,6 +69,7 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - ✓ R005 신청 프로필 암호화 저장 및 재사용 — M001/S01
 - ✓ R007 안전 가드 (시간 가드, 재시도 금지, 단일 계정, 로그 마스킹) — M001/S02
 - ✓ R009 약관 동의 명시적 사용자 확인 — M001/S02
+- ✓ R019 account 토큰 → 팬이벤트 토큰 교환 — v0.3.0 / Phase 05 (실계정 1회 관측: rung1 직접 사용이 계정 도메인 쿠키로 `/fans/me` 200+fanId 확보. **rung2(명시적 교환)는 미실행으로 여전히 미검증**)
 
 ### Active
 
@@ -76,9 +77,8 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - [ ] R008 Windows .exe + macOS .dmg 크로스플랫폼 빌드 배포
 - [ ] R010 개인정보 로그 마스킹
 - [ ] R016 로그인 방식 선택 (API 통신 / 브라우저) — v0.3.0 / Phase 06
-- [ ] R017 API 3단계 자격증명 로그인 — v0.3.0 / Phase 05
-- [ ] R018 이메일 OTP 코드 입력 및 인증 — v0.3.0 / Phase 05
-- [ ] R019 account 토큰 → 팬이벤트 토큰 교환 — v0.3.0 / Phase 05
+- [ ] R017 API 자격증명 로그인 (실측 계약 — `by-credentials` 단독 + reCAPTCHA) — v0.3.0
+- [ ] R018 이메일 OTP 코드 입력 및 인증 — **보류 (blocked, Phase 매핑 해제)** — HAR 상 OTP 단계 부재로 미입증
 - [ ] R020 API 로그인 실패 사유 한국어 안내 — v0.3.0 / Phase 06
 - [ ] R021 API 모드 제약 사전 고지 — v0.3.0 / Phase 06
 - [ ] R022 신청 시각 전 토큰 수명 체크 및 재로그인 유도 — v0.3.0 / Phase 07
@@ -100,16 +100,19 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 ## Out of Scope
 
 - **다계정 동시 신청** — 별도 마일스톤(v0.4.0 후보)으로 분리. 저장소·세션·엔진 전반의 다중화가 필요해 스코프가 독립적이며, 같은 IP에서 동시 신청 시 플랫폼 제재 리스크를 클라이언트가 먼저 확인해야 한다.
-- **reCAPTCHA 우회** — 계정 정지 및 법적 리스크. 영구 제외. API 모드의 OTP 강제는 우회 대상이 아니라 명시적으로 안내할 제약으로 다룬다.
-- **API 모드 자동 재로그인** — OTP가 사람의 개입을 요구하므로 기술적으로 불가능. 사전 경고로 대체한다.
+- **reCAPTCHA 우회** — 계정 정지 및 법적 리스크. 영구 제외. **(2026-08-25 정정)** 우회 대상이 아니라 명시적으로 안내할 제약은 'OTP 강제'가 아니라 **reCAPTCHA 관문 자체**다 — 순수 HTTP 로그인이 불가능한 근본 원인이며, 그래서 헤드리스 BrowserWindow 가 유일한 경로다.
+- **API 모드 자동 재로그인** — **(2026-08-25 정정)** 불가 사유는 OTP 가 아니라 reCAPTCHA 다. 캡차가 사람/브라우저 개입을 요구하므로 무인 재로그인은 여전히 불가능하며, 결론(사전 경고로 대체)은 그대로 유지된다.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| 브라우저 모드를 기본값으로 유지 | API 모드는 매 로그인 OTP가 강제되어 선착순 자동화의 핵심 가치를 훼손한다 | — Pending |
+| 브라우저 모드를 기본값으로 유지 | ~~API 모드는 매 로그인 OTP가 강제되어~~ **(2026-08-25 근거 정정)** API 모드는 매 로그인 reCAPTCHA 관문에 막혀 무인 실행이 불가능하다 — 결론은 유지, 사유가 바뀌었다 | ✓ Good (근거 강화) |
 | API 모드 토큰 만료는 사전 경고로 대응 | 자동 재로그인이 불가능하므로, 이벤트를 놓치기 전에 사용자가 개입할 시간을 준다 | — Pending |
-| 로그인 API를 리버싱해 직접 호출 | 번들 분석 + 실서버 프로브로 계약을 검증함 (2026-08-25) | ✓ Good |
+| 로그인 API를 리버싱해 직접 호출 | 번들 분석 + 실서버 프로브로 계약을 검증함 (2026-08-25) | ⚠️ 부분 무효 — 번들 분석만으로는 `otpSessionId` 가 캡차 토큰임을 구분하지 못했다. HAR 실측이 계약을 정정 (05-01-SUMMARY.md) |
+| [Phase 05] 반증된 계약을 삭제 대신 VOID 마킹으로 보존 | 틀린 전제가 코드보다 넓게 전파된다는 것을 05-01 이 실증했다 — 왜 틀렸는지를 남겨야 재발을 막는다 | ✓ Good |
+| [Phase 05] R019 는 1회 실계정 관측으로 판정 | 반복 가능한 자동 테스트로는 얻을 수 없는 신호이며, 반복 로그인은 계정 리스크를 키운다 | ✓ Good — rung1 성립 확인 |
+| [Phase 05] ApplyEngine 의 사다리 토큰 수용은 shape 수준 근거로 사인오프 | 실제 신청 시도는 라이브 FIFO 이벤트에 대한 되돌릴 수 없는 행위라 검증 비용이 리스크를 초과한다 | ⚠️ 잔여 리스크 — D-04 로 인수 |
 
 ## Known Limitations (Post-M001)
 
@@ -137,4 +140,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-25 after v0.3.0 milestone start*
+*Last updated: 2026-08-25 after Phase 05*
