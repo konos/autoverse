@@ -56,9 +56,41 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - **IPC:** auth:*, profile:*, apply:*, log:* 4개 네임스페이스로 main↔renderer 분리
 - **빌드:** `electron-builder`로 macOS .dmg(arm64, 95MB) + Windows NSIS .exe(arm64, 84MB)
 
-## Capability Contract
+## Requirements
 
-See `.planning/REQUIREMENTS.md` for the explicit capability contract, requirement status, and coverage mapping.
+전체 계약과 커버리지 매핑은 `.planning/REQUIREMENTS.md`가 정본이다. 아래는 요약이다.
+
+### Validated
+
+- ✓ R001 앱 내 Weverse 로그인 및 쿠키 자동 추출 — M001/S01
+- ✓ R002 이벤트 폼 스키마 조회 및 파싱 — M001/S02
+- ✓ R003 서버 시간 동기화 + RTT 보정 정밀 타이밍 POST — M001/S02
+- ✓ R004 신청 결과 폴링 (REQUESTED → COMPLETED) — M001/S02
+- ✓ R005 신청 프로필 암호화 저장 및 재사용 — M001/S01
+- ✓ R007 안전 가드 (시간 가드, 재시도 금지, 단일 계정, 로그 마스킹) — M001/S02
+- ✓ R009 약관 동의 명시적 사용자 확인 — M001/S02
+
+### Active
+
+- [ ] R006 실시간 동작 로그 패널 + 로그 파일 다운로드
+- [ ] R008 Windows .exe + macOS .dmg 크로스플랫폼 빌드 배포
+- [ ] R010 개인정보 로그 마스킹
+- [ ] R016 로그인 방식 선택 (API 통신 / 브라우저) — v0.3.0 / Phase 06
+- [ ] R017 API 3단계 자격증명 로그인 — v0.3.0 / Phase 05
+- [ ] R018 이메일 OTP 코드 입력 및 인증 — v0.3.0 / Phase 05
+- [ ] R019 account 토큰 → 팬이벤트 토큰 교환 — v0.3.0 / Phase 05
+- [ ] R020 API 로그인 실패 사유 한국어 안내 — v0.3.0 / Phase 06
+- [ ] R021 API 모드 제약 사전 고지 — v0.3.0 / Phase 06
+- [ ] R022 신청 시각 전 토큰 수명 체크 및 재로그인 유도 — v0.3.0 / Phase 07
+- [ ] R023 API 모드 자격증명 암호화 저장 — v0.3.0 / Phase 07
+
+### Out of Scope
+
+- R011 추첨형(DRAW) 이벤트 지원 — 선착순(FIFO) 전용 프로젝트
+- R012 다계정/타인 명의 자동 신청 — anti-feature. 약관 위반 및 형평성 문제. **클라이언트가 v0.4.0으로 요청한 항목이므로 진행 시 이 결정을 명시적으로 재검토해야 함**
+- R013 캡차 우회 — anti-feature. 약관 위반. 영구 제외
+- R014 라이선스/배포 제한 — 스코프 축소를 위해 제외
+- R015 토큰 자체 갱신 — 갱신 엔드포인트 미캡처. 재로그인 안내로 대체 (R022가 이를 구현)
 
 ## Milestone Sequence
 
