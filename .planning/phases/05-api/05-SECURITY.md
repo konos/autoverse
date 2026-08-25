@@ -1,9 +1,9 @@
 ---
 phase: 05
 slug: api
-status: blocked
+status: verified
 # threats_open = count of OPEN threats at or above workflow.security_block_on severity (the blocking gate)
-threats_open: 1
+threats_open: 0
 asvs_level: 1
 created: 2026-08-25
 ---
@@ -48,7 +48,7 @@ created: 2026-08-25
 | T-05-14 | Spoofing / 사용자 피해 | 앱 시작 시 다른 계정 자동 로그인 → 알림 메일 | high | mitigate | `05-SPIKE-RESULT.md` §5 3항 — `credentials.enc` 존재/수정시각만 확인, 내용 미열람 | closed |
 | T-05-15 | Repudiation | 실패를 flaky 로 오인해 재시도 → 반복 로그인 알림 | medium | mitigate | `05-SPIKE-RESULT.md` §2 — 사다리 정확히 1회 실행, 에이전트 재시도 요청 0회 | closed |
 | T-05-16 | Elevation of Privilege | 판정 통과를 위한 캡차 우회/토큰 주입/파라미터 브루트포스 | high | mitigate | `05-SPIKE-RESULT.md` 캡차 우회 언급 0건. §6 의 departure 브루트포스는 미실행 "다음 단계 제안" 으로만 기록 | closed |
-| **T-05-17** | **Information Disclosure** | **`auth-service.ts:423,704,1033,1038` 네비게이션 URL 로그** | **high** | **mitigate** | **없음 — `mask.ts` `SENSITIVE_PATTERNS` 는 camelCase `key:`/`key=` 형태만 매칭하며 snake_case URL 쿼리 파라미터 룰이 없다** | **open** |
+| T-05-17 | Information Disclosure | `auth-service.ts:423,704,1033,1038` 네비게이션 URL 로그 | high | mitigate | `mask.ts:60` snake_case URL 쿼리 파라미터 룰 (`access_token`/`refresh_token`/`service_user_id`). 커밋 `186042f`. 감사관이 실제 `maskSensitive()` 로 독립 재현 확인, 회귀 테스트 5건 + 관련 스위트 77/77 통과 | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -56,7 +56,7 @@ created: 2026-08-25
 
 ---
 
-## Open Threat Detail — T-05-17
+## Resolved Threat Detail — T-05-17
 
 **출처:** 계획 시점 등록부에 없음. `05-03-SUMMARY.md` 의 `## Threat Flags` 에서 발견되어 등록부에 추가됨.
 
@@ -69,11 +69,33 @@ created: 2026-08-25
 값이 사용자 로컬 로그 파일에 평문으로 존재한다:
 `~/Library/Application Support/weverse-fanevent-apply/logs/2026-08-25.log`
 
-**해소 조건:**
-1. `src/shared/mask.ts` `SENSITIVE_PATTERNS` 에 snake_case URL 쿼리 파라미터 마스킹 룰 추가
-   (`access_token=`, `refresh_token=`, `service_user_id=`)
-2. 이미 기록된 로그 파일 정리 (별도 조치 — 코드 수정만으로는 소급 적용되지 않음)
-3. `/gsd-secure-phase 05` 재실행
+**해소 (2026-08-25, 커밋 `186042f`):**
+1. ✅ `src/shared/mask.ts:60` 에 snake_case URL 쿼리 파라미터 룰 추가
+   (`access_token=`, `refresh_token=`, `service_user_id=`). 값 종결자에 `&`/`#` 를 포함해
+   다음 파라미터를 삼키지 않으며, 키 뒤에 곧바로 `=` 가 오는 경우만 매칭되므로
+   `access_token_len=64` 같은 진단 로그는 훼손되지 않는다.
+2. ✅ 회귀 테스트 5건 추가 (`mask.test.ts`) — 감사관이 사용한 합성 리다이렉트 URL 포함.
+   `mask` + `log-service` + `account-token-capture` 스위트 77/77 통과, 전체 235/235 통과.
+3. ✅ `/gsd-secure-phase 05` 재감사 → `## SECURED`, threats_open: 0
+
+**재감사 독립 검증 (감사관 수행):** 직전 감사와 동일한 합성 라인을 실제 `maskSensitive()` 에
+통과시킨 결과 —
+```
+IN : ...loginResult?access_token=eyJ...&refresh_token=eyJ...&service_user_id=abc123
+OUT: ...loginResult?access_token=***&refresh_token=***&service_user_id=***
+```
+`log-service.ts:13` 이 `LogService.info()` 내부에서 무조건 `maskSensitive()` 를 적용하므로
+4개 로그 지점 전부가 동일한 초크 포인트를 통과한다. 원시 `url` 을 직접 기록하는 우회 경로
+(`console.log` 등)는 발견되지 않았다.
+
+**적용 범위 판단:** `id_token=`, `code=`, 하이픈/대문자 변형은 새 룰이 매칭하지 않으나, 이
+코드베이스의 Weverse 흐름은 OAuth authorization-code 가 아니라 쿠키/자격증명 기반 로그인
+(`we2_access_token` 쿠키 + `POST /v4/auth/token/by-credentials`) 이며, 실측·문서상 리다이렉트에
+등장하는 파라미터는 위 3종뿐이다. 도달 불가능한 변형은 열린 갭으로 계수하지 않는다.
+
+**⚠ 잔여 운영 조치 (코드 갭 아님):** 수정은 소급 적용되지 않는다. Phase 05 실계정 관측 당시
+기록된 실제 토큰은 여전히 아래 파일에 평문으로 남아 있으므로 사용자가 직접 정리해야 한다:
+`~/Library/Application Support/weverse-fanevent-apply/logs/2026-08-25.log`
 
 **스코프 근거:** `05-03-SUMMARY.md` 가 "코드 변경은 이 plan 스코프 밖(verification #5)이라 수정하지
 않았다 — Phase 06/07 최우선 후보" 로 명시. 이번 감사에서 `block_on: high` 임계를 충족하여 차단 위협으로 승격.
@@ -85,7 +107,7 @@ created: 2026-08-25
 | Risk ID | Threat Ref | Rationale | Accepted By | Date |
 |---------|------------|-----------|-------------|------|
 
-No accepted risks. (T-05-17 은 사용자 판단에 따라 수용하지 않고 수정 대상으로 유지 — 2026-08-25)
+No accepted risks. (T-05-17 은 수용하지 않고 코드 수정으로 해소됨 — 커밋 `186042f`, 2026-08-25)
 
 ---
 
@@ -93,7 +115,8 @@ No accepted risks. (T-05-17 은 사용자 판단에 따라 수용하지 않고 �
 
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
-| 2026-08-25 | 17 | 16 | 1 | gsd-security-auditor (ASVS L1, block_on: high) |
+| 2026-08-25 | 17 | 16 | 1 | gsd-security-auditor (ASVS L1, block_on: high) — 최초 감사 |
+| 2026-08-25 | 17 | 17 | 0 | gsd-security-auditor (ASVS L1, block_on: high) — `186042f` 이후 재감사 |
 
 ---
 
@@ -101,7 +124,7 @@ No accepted risks. (T-05-17 은 사용자 판단에 따라 수용하지 않고 �
 
 - [x] All threats have a disposition (mitigate / accept / transfer)
 - [x] Accepted risks documented in Accepted Risks Log (none)
-- [ ] `threats_open: 0` confirmed — **1 open (T-05-17)**
-- [ ] `status: verified` set in frontmatter
+- [x] `threats_open: 0` confirmed
+- [x] `status: verified` set in frontmatter
 
-**Approval:** pending — blocked on T-05-17
+**Approval:** verified 2026-08-25
