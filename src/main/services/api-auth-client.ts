@@ -130,7 +130,7 @@ export class ApiAuthClient {
           : `계정 API 실패: HTTP ${res.status}`;
       logService.error(
         "ApiAuthClient",
-        `postAccount ${path} failed status=${res.status} code=${code}`,
+        `postAccount ${path} failed status=${res.status} code=${code} message=${message}`,
       );
       throw new ApiAuthError(code, message, res.status);
     }
@@ -146,7 +146,36 @@ export class ApiAuthClient {
 
   async requestOtpSession(email: string): Promise<OtpSession> {
     logService.info("ApiAuthClient", `requestOtpSession email=${email.slice(0, 3)}***`);
-    return this.postAccount<OtpSession>("/v2/auth/otp-sessions", { email });
+    const raw = await this.postAccount<Record<string, unknown>>("/v2/auth/otp-sessions", { email });
+
+    // Observability (05-01 결함 B): 응답 스키마가 가정과 다르면 조용히 undefined
+    // 를 by-credentials 로 흘려보내는 대신, 여기서 즉시 드러낸다. 키 이름과
+    // 존재여부/길이만 로그에 남기고 otpSessionId 값 자체나 이메일 전체는 남기지
+    // 않는다. expiresIn 은 민감정보가 아니므로 값을 그대로 남긴다.
+    const keys = raw && typeof raw === "object" ? Object.keys(raw) : [];
+    const otpSessionIdValue = raw && typeof raw === "object" ? raw.otpSessionId : undefined;
+    const hasOtpSessionId = typeof otpSessionIdValue === "string" && otpSessionIdValue.length > 0;
+    const expiresIn = raw && typeof raw === "object" ? raw.expiresIn : undefined;
+    logService.info(
+      "ApiAuthClient",
+      `requestOtpSession response keys=[${keys.join(",")}] hasOtpSessionId=${hasOtpSessionId} otpSessionIdLen=${hasOtpSessionId ? (otpSessionIdValue as string).length : 0} expiresIn=${expiresIn ?? "absent"}`,
+    );
+
+    if (!hasOtpSessionId) {
+      logService.error(
+        "ApiAuthClient",
+        "requestOtpSession: otpSessionId missing or not a non-empty string — refusing to proceed to by-credentials",
+      );
+      throw new ApiAuthError(
+        "OTP_SESSION_MALFORMED",
+        "OTP 세션 응답에 otpSessionId 가 없습니다 — 서버 응답 스키마가 예상과 다릅니다",
+      );
+    }
+
+    return {
+      otpSessionId: otpSessionIdValue as string,
+      expiresIn: typeof expiresIn === "number" ? expiresIn : undefined,
+    };
   }
 
   async loginWithCredentials(

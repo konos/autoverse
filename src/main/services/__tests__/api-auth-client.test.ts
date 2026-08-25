@@ -90,6 +90,50 @@ describe("ApiAuthClient otp-session", () => {
     const trace2 = (init2.headers as Record<string, string>)["X-ACC-TRACE-ID"];
     expect(trace1).not.toBe(trace2);
   });
+
+  it("otp-session malformed: 응답에 otpSessionId 가 없으면 OTP_SESSION_MALFORMED 로 즉시 실패하고 by-credentials 로 진행하지 않는다 (05-01 결함 B)", async () => {
+    const fetchFn = makeFetchQueue([{ status: 200, body: { unexpectedField: "surprise" } }]);
+    const client = new ApiAuthClient(fetchFn);
+
+    await expect(client.requestOtpSession("user@example.com")).rejects.toMatchObject({
+      code: "OTP_SESSION_MALFORMED",
+    });
+
+    // Only the one otp-sessions call happened — no silent fall-through to another endpoint.
+    const mock = fetchFn as unknown as ReturnType<typeof vi.fn>;
+    expect(mock.mock.calls.length).toBe(1);
+  });
+
+  it("otp-session malformed: otpSessionId 가 빈 문자열이면 OTP_SESSION_MALFORMED 로 실패한다", async () => {
+    const fetchFn = makeFetchQueue([{ status: 200, body: { otpSessionId: "" } }]);
+    const client = new ApiAuthClient(fetchFn);
+
+    await expect(client.requestOtpSession("user@example.com")).rejects.toMatchObject({
+      code: "OTP_SESSION_MALFORMED",
+    });
+  });
+
+  it("otp-session malformed: otpSessionId 가 문자열이 아니면 OTP_SESSION_MALFORMED 로 실패한다", async () => {
+    const fetchFn = makeFetchQueue([{ status: 200, body: { otpSessionId: 12345 } }]);
+    const client = new ApiAuthClient(fetchFn);
+
+    await expect(client.requestOtpSession("user@example.com")).rejects.toMatchObject({
+      code: "OTP_SESSION_MALFORMED",
+    });
+  });
+
+  it("otp-session 관측성: 정상 응답이면 응답 키 이름 목록과 otpSessionId 존재 여부가 로그로 남는다 (값은 남기지 않음)", async () => {
+    const fetchFn = makeFetchQueue([{ status: 200, body: { otpSessionId: "sess-real-value-123" } }]);
+    const client = new ApiAuthClient(fetchFn);
+
+    await client.requestOtpSession("user@example.com");
+
+    const infoSpy = logService.info as unknown as ReturnType<typeof vi.fn>;
+    const allArgs = infoSpy.mock.calls.map((call) => JSON.stringify(call)).join("\n");
+    expect(allArgs).toContain("otpSessionId");
+    expect(allArgs).toContain("hasOtpSessionId=true");
+    expect(allArgs).not.toContain("sess-real-value-123");
+  });
 });
 
 // ── otp verify ───────────────────────────────────────────────────────────
