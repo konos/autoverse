@@ -149,6 +149,33 @@ describe("maskSensitive", () => {
     expect(result).not.toContain("Bearer abcdefghijklmnopqrst1234567890uvwxyz");
   });
 
+  it("masks password value in a serialized object string (email/otpSessionId preserved)", () => {
+    const text = '{"email":"a@b.com","password":"SuperSecret123!","otpSessionId":"abc"}';
+    const result = maskSensitive(text);
+    expect(result).not.toContain("SuperSecret123!");
+    expect(result).toContain('"email":"a@b.com"');
+    expect(result).toContain('"otpSessionId":"abc"');
+  });
+
+  it("masks otpCode value", () => {
+    const text = '{"otpCode":"123456"}';
+    const result = maskSensitive(text);
+    expect(result).not.toContain("123456");
+  });
+
+  it("masks password= (equals-separated) form", () => {
+    const text = "password=SuperSecret123!";
+    const result = maskSensitive(text);
+    expect(result).not.toContain("SuperSecret123!");
+  });
+
+  it("existing 7 rules still work together (Authorization + phoneNumber regression)", () => {
+    const text = 'Authorization: Bearer abcdefghijklmnopqrst1234567890uvwxyz, phoneNumber: "01012345678"';
+    const result = maskSensitive(text);
+    expect(result).not.toContain("Bearer abcdefghijklmnopqrst1234567890uvwxyz");
+    expect(result).toContain("****5678");
+  });
+
   it("masks applyToken in JSON-like text", () => {
     const text = `applyToken: "abcdefghijklmnopqrst1234567890uvwxyz12345"`;
     const result = maskSensitive(text);
