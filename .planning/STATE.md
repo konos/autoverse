@@ -5,11 +5,11 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: planning
-stopped_at: Phase 06 context gathered
-last_updated: "2026-08-25T15:19:56.213Z"
+stopped_at: Phase 06 UI-SPEC approved
+last_updated: "2026-08-25T17:12:18.350Z"
 last_activity: 2026-08-25
 last_activity_desc: Phase 05 complete, transitioned to Phase 06
-state_head: c068f24889d18abe549d387e7c181b018718af84
+state_head: c2befd7b1a6b56fd59abdf1a86d2c82815f063c9
 progress:
   total_phases: 3
   completed_phases: 1
@@ -114,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-25T15:19:56.117Z
-Stopped at: Phase 06 context gathered
-Resume file: .planning/phases/06-ui/06-CONTEXT.md
+Last session: 2026-08-25T17:12:18.250Z
+Stopped at: Phase 06 UI-SPEC approved
+Resume file: .planning/phases/06-ui/06-UI-SPEC.md
