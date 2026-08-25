@@ -56,14 +56,23 @@ are part of the phase gate, not optional.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | R016 | — | env absent + persisted `api` → `resolveLoginMode()` returns `"api"` | unit | `npx vitest run src/main/__tests__/login-mode.test.ts` | ❌ W0 (extend existing) | ⬜ pending |
-| TBD | TBD | TBD | R016 | — | env set → `lockedByEnv` true, persisted value ignored (UI must show locked state) | unit | `npx vitest run src/main/__tests__/login-mode.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | R016 | — | corrupt/missing `settings.json` → silent fallback to `browser`, never throws | unit | `npx vitest run src/main/services/__tests__/settings-store.test.ts` | ❌ W0 (new) | ⬜ pending |
-| TBD | TBD | TBD | R020 | T-06-* | captcha signal → D-13 Korean copy, NOT the OTP copy | unit | `npx vitest run src/shared/__tests__/login-failure.test.ts` | ❌ W0 (new) | ⬜ pending |
-| TBD | TBD | TBD | R020 | R010 | identifier appended to user-facing message passes `maskSensitive()` — no raw token/email leak | unit | `npx vitest run src/shared/__tests__/login-failure.test.ts` + integration case in `auth-service.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | R021 | — | first API-mode selection → notice required (`shouldShowApiModeNotice(null, v)` true) | unit | `npx vitest run src/shared/__tests__/notice-ack.test.ts` | ❌ W0 (new) | ⬜ pending |
-| TBD | TBD | TBD | R021 | — | same acknowledged version → modal not re-shown; bumped version → re-shown (D-10) | unit | same file | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | R016/SC1 | — | D-03: cookie session restore allowed in BOTH modes; stored-credential auto-login blocked in BOTH | unit | `npx vitest run src/main/services/__tests__/auth-service.test.ts` | ❌ W0 (rewrite existing describe) | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | R016 | T-06-05 | env absent + persisted `api` -> `resolveLoginMode()` returns `"api"` | unit | `npx vitest run src/main/__tests__/login-mode.test.ts` | W0 (extend existing) | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | R016 | T-06-03 | env set -> `lockedByEnv` true, persisted value ignored (UI must show locked state) | unit | `npx vitest run src/main/__tests__/login-mode.test.ts` | W0 (extend existing) | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | R016 | T-06-01 | corrupt/missing `settings.json` -> silent fallback to `browser`, never throws | unit | `npx vitest run src/main/services/__tests__/settings-store.test.ts` | W0 (new) | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | R016 | T-06-02 | atomic tmp+rename write - rapid consecutive writes never leave a partial file | unit | `npx vitest run src/main/services/__tests__/settings-store.test.ts` | W0 (new) | ⬜ pending |
+| 06-01 T3 | 06-01 | 1 | R016 | - | write failure propagates to the caller and the persisted value is unchanged (UI-SPEC E1 error) | unit | `npx vitest run src/main/services/__tests__/settings-store.test.ts` | W0 (new) | ⬜ pending |
+| 06-01 T2 | 06-01 | 1 | R021 | - | first API-mode selection -> notice required (`shouldShowApiModeNotice(null, v)` true) | unit | `npx vitest run src/shared/__tests__/api-mode-notice.test.ts` | W0 (new) | ⬜ pending |
+| 06-01 T2 | 06-01 | 1 | R021 | - | same acknowledged version -> modal not re-shown; bumped version -> re-shown (D-10) | unit | `npx vitest run src/shared/__tests__/api-mode-notice.test.ts` | W0 (new) | ⬜ pending |
+| 06-02 T1 | 06-02 | 1 | R020 | T-06-19 | captcha signal -> D-13 Korean copy, never the disproven email-code narrative (table test over every reason) | unit | `npx vitest run src/shared/__tests__/login-failure.test.ts` | W0 (new) | ⬜ pending |
+| 06-02 T2 | 06-02 | 1 | R020 | T-06-07 | dynamic form-error text trimmed and capped at 120 chars; untruncated original kept for the log path | unit | `npx vitest run src/shared/__tests__/login-failure.test.ts` | W0 (new) | ⬜ pending |
+| 06-04 T3 | 06-04 | 2 | R016/SC1 | T-06-12 | D-03: cookie session restore allowed in BOTH modes; stored-credential auto-login blocked in BOTH | unit | `npx vitest run src/main/services/__tests__/auth-service.test.ts` | W0 (rewrite existing describe) | ⬜ pending |
+| 06-04 T2 | 06-04 | 2 | R016 | T-06-13 | disproven-contract methods removed; remaining ApiAuthClient tests only call live methods | unit | `npx vitest run src/main/services/__tests__/api-auth-client.test.ts` | W0 (repair) | ⬜ pending |
+| 06-05 T1 | 06-05 | 3 | R020 | T-06-21 | raw DOM signal -> reason mapping incl. `null` (broken selector) and unknown strings -> unmapped fallback | unit | `npx vitest run src/shared/__tests__/login-failure.test.ts` | W0 (extend) | ⬜ pending |
+| 06-05 T3 | 06-05 | 3 | R020 | T-06-17 / R010 | identifier and message returned to the renderer pass `maskSensitive()` - no raw token/query-string leak | unit | `npx vitest run src/main/services/__tests__/auth-service.test.ts` | W0 (extend) | ⬜ pending |
+| 06-06 T2 | 06-06 | 4 | R021 | T-06-22 | tab-click decision: first API selection opens the notice and does NOT persist; locked state does nothing | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ⬜ pending |
+| 06-06 T2 | 06-06 | 4 | R016 | T-06-23 | locked badge detail names the applied mode label, never the raw env value | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ⬜ pending |
+| 06-06 T3 | 06-06 | 4 | R020 | T-06-24 | failure view: browser-switch button only for the reasons that ask for it; no chip when identifier is absent | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ⬜ pending |
+| 06-07 T1 | 06-07 | 5 | R016/R020/R021 | T-06-13 | phase gate - full suite + both typechecks green (D-02 deletions surface as type errors first) | gate | `npm test && npm run typecheck:main && npm run typecheck` | existing | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
