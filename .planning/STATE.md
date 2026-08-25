@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 05
 current_phase_name: API 로그인 핵심 흐름 + 토큰 교환 검증
 status: blocked
-stopped_at: "Phase 05 halted at 05-01 Task 3 — HAR 증거로 by-credentials 의 otpSessionId 가 reCAPTCHA 토큰 필드임이 확인되어 3단계 로그인 전제가 무효화됨. 재설계 필요."
-last_updated: "2026-08-25T07:07:48.941Z"
+stopped_at: Phase 05 context gathered — R019 사다리 검증 스파이크로 재설계 방향 확정 (재플랜 대기)
+last_updated: "2026-08-25T07:59:45.611Z"
 last_activity: 2026-08-25
-last_activity_desc: "Phase 05 halted — API 계약 전제 무효화, 재설계 대기"
-state_head: cc34d41cea11d95651b1708cb4dc9d8a262e21b6
+last_activity_desc: Phase 05 halted — API 계약 전제 무효화, 재설계 대기
+state_head: f59da445b3c58e57d6140b997359b0aabfde839f
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -91,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-25
-Stopped at: v0.3.0 ROADMAP.md 및 STATE.md 작성 완료, REQUIREMENTS.md traceability 업데이트 완료
-Resume file: None
+Last session: 2026-08-25T07:59:45.598Z
+Stopped at: Phase 05 context gathered — R019 사다리 검증 스파이크로 재설계 방향 확정 (재플랜 대기)
+Resume file: .planning/phases/05-api/05-CONTEXT.md
