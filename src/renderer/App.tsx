@@ -18,6 +18,13 @@ export default function App() {
   const [formSchema, setFormSchema] = useState<FormSchema | null>(null);
   const [loginMode, setLoginModeState] = useState<LoginMode>("browser");
   const [lockedByEnv, setLockedByEnv] = useState(false);
+  // currentVersion starts at API_MODE_NOTICE_VERSION's known floor (1) and is
+  // corrected from main on mount below — main is the source of truth so a
+  // version bump is never missed even if this default drifts.
+  const [noticeAck, setNoticeAck] = useState<{ ackedVersion: number | null; currentVersion: number }>({
+    ackedVersion: null,
+    currentVersion: 1,
+  });
 
   useEffect(() => {
     window.api.auth.getStatus().then((s) => {
@@ -28,6 +35,10 @@ export default function App() {
     window.api.settings.getLoginMode().then((snapshot) => {
       setLoginModeState(snapshot.mode);
       setLockedByEnv(snapshot.lockedByEnv);
+    });
+
+    window.api.settings.getNoticeAck().then((snapshot) => {
+      setNoticeAck(snapshot);
     });
 
     const unsubscribe = window.api.onAuthEvent((event: AuthEvent) => {
@@ -127,6 +138,14 @@ export default function App() {
     }
   };
 
+  // Only called from LoginPanel's "확인했습니다" path — never from
+  // Cancel/Escape. Throws on IPC failure so the caller's try/catch (which
+  // gates the subsequent setLoginMode("api") call) can react.
+  const handleAckNotice = async (version: number) => {
+    await window.api.settings.ackNotice(version);
+    setNoticeAck((prev) => ({ ...prev, ackedVersion: version }));
+  };
+
   const handleProfileSaved = () => {
     setStep("event-setup");
   };
@@ -159,6 +178,8 @@ export default function App() {
         loginMode={loginMode}
         lockedByEnv={lockedByEnv}
         onSetLoginMode={handleSetLoginMode}
+        noticeAck={noticeAck}
+        onAckNotice={handleAckNotice}
       />
 
       {step === "profile" && authStatus.isLoggedIn && authStatus.fanId !== undefined && (

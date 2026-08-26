@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { AuthStatus, LoginMode } from "../../shared/types";
+import ApiModeNoticeModal from "./ApiModeNoticeModal";
+import { resolveTabView, describeLockedMode, shouldShowInlineNotice, decideTabClick } from "./login-panel-view";
 
 interface LoginPanelProps {
   status: AuthStatus;
@@ -10,7 +12,9 @@ interface LoginPanelProps {
   onValidateToken: () => void;
   loginMode: LoginMode;
   lockedByEnv: boolean;
-  onSetLoginMode: (mode: LoginMode) => void;
+  onSetLoginMode: (mode: LoginMode) => Promise<void>;
+  noticeAck: { ackedVersion: number | null; currentVersion: number };
+  onAckNotice: (version: number) => Promise<void>;
 }
 
 type LoginState = "idle" | "logging-in" | "logged-in" | "expired";
@@ -45,12 +49,60 @@ export default function LoginPanel({
   loginMode,
   lockedByEnv,
   onSetLoginMode,
+  noticeAck,
+  onAckNotice,
 }: LoginPanelProps) {
   const loginState = getLoginState(status, loading);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [credLoading, setCredLoading] = useState(false);
   const [credMessage, setCredMessage] = useState<string | null>(null);
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [noticeSaving, setNoticeSaving] = useState(false);
+  const [noticeSaveError, setNoticeSaveError] = useState<string | null>(null);
+
+  const tabView = resolveTabView(loginMode, lockedByEnv);
+
+  // Interaction Contract 2/3: the tab click handler only branches on
+  // decideTabClick()'s result — it never decides on its own whether to open
+  // the modal or persist directly.
+  const handleTabClick = (next: LoginMode) => {
+    const decision = decideTabClick({
+      next,
+      current: loginMode,
+      lockedByEnv,
+      ackedVersion: noticeAck.ackedVersion,
+    });
+    if (decision.action === "none") return;
+    if (decision.action === "notice") {
+      setNoticeSaveError(null);
+      setNoticeOpen(true);
+      return;
+    }
+    void onSetLoginMode(decision.mode);
+  };
+
+  // Only "확인했습니다" may call ack-notice + set-login-mode — and only in
+  // that order (ack must succeed before the mode is persisted). Cancel/Esc
+  // never reach this handler.
+  const handleAcknowledge = async () => {
+    setNoticeSaving(true);
+    setNoticeSaveError(null);
+    try {
+      await onAckNotice(noticeAck.currentVersion);
+      await onSetLoginMode("api");
+      setNoticeOpen(false);
+    } catch {
+      setNoticeSaveError("저장에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setNoticeSaving(false);
+    }
+  };
+
+  const handleCancelNotice = () => {
+    setNoticeOpen(false);
+    setNoticeSaveError(null);
+  };
 
   const handleCredentialLogin = async () => {
     if (!email || !password) return;
@@ -69,7 +121,7 @@ export default function LoginPanel({
   };
 
   const isActive = !loading && !status.isLoggedIn && !credLoading;
-  const tabsDisabled = credLoading || loading || lockedByEnv;
+  const tabsDisabled = credLoading || loading || tabView.tabsDisabled;
 
   return (
     <section className="card" aria-labelledby="login-heading">
@@ -110,10 +162,10 @@ export default function LoginPanel({
 
       {/* D-07: tabs render regardless of login state — changing mode never
           touches the current session (status badge above stays untouched). */}
-      <div className="login-mode-tabs" style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+      <div className="login-mode-tabs" style={{ display: "flex", gap: "0.5rem", marginBottom: tabView.showBadge ? "0.35rem" : "0.75rem" }}>
         <button
           className={`btn ${loginMode === "api" ? "btn-primary" : "btn-secondary"}`}
-          onClick={() => onSetLoginMode("api")}
+          onClick={() => handleTabClick("api")}
           style={{ flex: 1, fontSize: "0.8rem", padding: "0.35rem 0.5rem" }}
           disabled={tabsDisabled}
         >
@@ -121,13 +173,38 @@ export default function LoginPanel({
         </button>
         <button
           className={`btn ${loginMode === "browser" ? "btn-primary" : "btn-secondary"}`}
-          onClick={() => onSetLoginMode("browser")}
+          onClick={() => handleTabClick("browser")}
           style={{ flex: 1, fontSize: "0.8rem", padding: "0.35rem 0.5rem" }}
           disabled={tabsDisabled}
         >
           브라우저 로그인
         </button>
       </div>
+
+      {/* D-06: env-lock badge — renders only when lockedByEnv is true, never
+          reserves empty space otherwise (UI-SPEC E2 empty). */}
+      {tabView.showBadge && (
+        <>
+          <span className="login-mode-badge">환경변수로 고정됨</span>
+          <p className="login-mode-badge-detail">{describeLockedMode(loginMode)}</p>
+        </>
+      )}
+
+      {/* D-09: persistent inline notice — visible for as long as API mode is
+          active, independent of login state, no dismiss button. */}
+      {shouldShowInlineNotice(loginMode) && (
+        <p className="login-mode-notice">
+          API 로그인은 Weverse 보안 확인(캡차) 시 실패할 수 있으며, 자동 재로그인을 지원하지 않습니다.
+        </p>
+      )}
+
+      <ApiModeNoticeModal
+        open={noticeOpen}
+        saving={noticeSaving}
+        saveError={noticeSaveError}
+        onAcknowledge={handleAcknowledge}
+        onCancel={handleCancelNotice}
+      />
 
       {status.isLoggedIn && (
         <div className="button-row" style={{ gap: "0.5rem" }}>
