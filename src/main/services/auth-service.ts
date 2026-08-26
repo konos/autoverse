@@ -322,7 +322,7 @@ export class AuthService extends EventEmitter {
             const btns = Array.from(document.querySelectorAll('button'));
             const loginBtn = btns.find(b => b.textContent.trim() === '로그인');
             return {
-              emailValue: emailInput?.value ?? 'NOT FOUND',
+              emailLen: emailInput?.value?.length ?? -1,
               pwLength: pwInput?.value?.length ?? -1,
               loginBtnFound: !!loginBtn,
               loginBtnDisabled: loginBtn?.disabled ?? null,
@@ -331,8 +331,20 @@ export class AuthService extends EventEmitter {
           })();
         `).catch(() => ({}));
         logService.info("AuthService", `credentialLogin(headless): debug=${JSON.stringify(debugInfo)}`);
+        // WR-03 (06-REVIEW.md) — 이 분기는 classifyCredentialLoginSignal()/
+        // mapLoginFailure() 를 거치지 않는 DOM 신호가 아니므로 overrideReason
+        // "unknown" + overrideMessage 로 buildFailureResult() 관문에 태운다.
+        // 사용자 대면 문구는 글자 그대로 유지한다 — 관문 통과가 목적이지 안내를
+        // 후퇴시키는 것이 아니다.
+        const failureResult = this.buildFailureResult(
+          null,
+          "unknown",
+          undefined,
+          "로그인 버튼이 활성화되지 않았습니다. 이메일/비밀번호를 확인해주세요.",
+        );
+        this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
         this.cleanupHeadless();
-        return { success: false, message: "로그인 버튼이 활성화되지 않았습니다. 이메일/비밀번호를 확인해주세요." };
+        return failureResult;
       }
 
       await win.webContents.executeJavaScript(`
@@ -478,11 +490,17 @@ export class AuthService extends EventEmitter {
    * @param overrideReason `rawSignal` 분류를 건너뛰고 사유를 직접 지정할 때 사용
    *   (예외/사다리 실패처럼 DOM 신호가 아닌 경로)
    * @param overrideDetail `overrideReason`과 함께 쓰는 디테일 원문
+   * @param overrideMessage 06-REVIEW WR-03 — 확정된 사용자 문구가 이미 있는 분기를
+   *   안내를 후퇴시키지 않고 마스킹 관문에 태우기 위한 자리. 주어지면
+   *   `mapLoginFailure()`가 돌려주는 문구 대신 이 문자열을 쓰되, 기존 문구와
+   *   완전히 동일하게 `maskSensitive()`를 통과시킨다. 사유 결정/`logDetail`
+   *   처리/`identifier` 마스킹 등 나머지 동작은 그대로다.
    */
   private buildFailureResult(
     rawSignal: string | null,
     overrideReason?: LoginFailureReason,
     overrideDetail?: string,
+    overrideMessage?: string,
   ): CredentialLoginResult {
     const { reason, detail } =
       overrideReason !== undefined
@@ -490,6 +508,7 @@ export class AuthService extends EventEmitter {
         : classifyCredentialLoginSignal(rawSignal);
 
     const guidance = mapLoginFailure(reason, detail);
+    const messageText = overrideMessage !== undefined ? overrideMessage : guidance.message;
 
     // 잘리지 않은 원문은 logService 로 보낸다 — 그쪽 자동 마스킹이 적용되므로
     // 여기서 다시 마스킹하지 않는다.
@@ -499,10 +518,11 @@ export class AuthService extends EventEmitter {
 
     // R010 마스킹 관문 — message/identifier 는 렌더러로 직접 반환되는 값이라
     // 로그 자동 마스킹 경로를 타지 않는다. 여기가 그 유일한 관문이다(T-06-06).
+    // overrideMessage 가 주어져도 동일하게 이 관문을 통과한다.
     const result: CredentialLoginResult = {
       success: false,
       reason,
-      message: maskSensitive(guidance.message),
+      message: maskSensitive(messageText),
     };
     if (guidance.identifier !== undefined) {
       result.identifier = maskSensitive(guidance.identifier);
