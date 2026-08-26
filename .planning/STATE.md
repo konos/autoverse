@@ -4,16 +4,16 @@ milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
-status: verifying
+status: executing
 stopped_at: Completed 06-07-PLAN.md
-last_updated: "2026-08-26T05:58:16.806Z"
+last_updated: "2026-08-26T06:55:46.189Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: 63f8c04b377e007bbcc221cdc75369c49bf11eb5
+state_head: 428a9b0c93948243122dc4c2a41d9ea0cf2a5a9c
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 10
+  total_plans: 13
   completed_plans: 10
   percent: 33
 ---
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 ## Current Position
 
-Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
+Phase: 06 (로그인 방식 선택 UI + 실패 안내) — READY TO EXECUTE
 Plan: 7 of 7
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-08-26 — Phase 06 execution started
 
 **Phase 05 결과 (완료 2026-08-25):** R019 사다리는 **rung1(직접 사용)이 실계정에서 성립**함을 1회 관측으로 확인했다 (계정 도메인 쿠키 JWT → `/fans/me` 200 + fanId). rung2(명시적 교환)는 미실행으로 여전히 미검증이다. 로그인 방식 최종 결정(D-04)은 Phase 06 에서 이 결과를 근거로 내린다.
