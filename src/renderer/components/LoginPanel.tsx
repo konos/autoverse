@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AuthStatus } from "../../shared/types";
+import type { AuthStatus, LoginMode } from "../../shared/types";
 
 interface LoginPanelProps {
   status: AuthStatus;
@@ -8,10 +8,12 @@ interface LoginPanelProps {
   onLogin: () => void;
   onLogout: (clearCredentials: boolean) => void;
   onValidateToken: () => void;
+  loginMode: LoginMode;
+  lockedByEnv: boolean;
+  onSetLoginMode: (mode: LoginMode) => void;
 }
 
 type LoginState = "idle" | "logging-in" | "logged-in" | "expired";
-type LoginMode = "credential" | "browser";
 
 function getLoginState(status: AuthStatus, loading: boolean): LoginState {
   if (loading) return "logging-in";
@@ -33,13 +35,20 @@ const STATE_COLORS: Record<LoginState, string> = {
   expired: "var(--color-error)",
 };
 
-export default function LoginPanel({ status, loading, error, onLogin, onLogout, onValidateToken }: LoginPanelProps) {
+export default function LoginPanel({
+  status,
+  loading,
+  error,
+  onLogin,
+  onLogout,
+  onValidateToken,
+  loginMode,
+  lockedByEnv,
+  onSetLoginMode,
+}: LoginPanelProps) {
   const loginState = getLoginState(status, loading);
-  const [mode, setMode] = useState<LoginMode>("credential");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [needOtp, setNeedOtp] = useState(false);
   const [credLoading, setCredLoading] = useState(false);
   const [credMessage, setCredMessage] = useState<string | null>(null);
 
@@ -49,10 +58,7 @@ export default function LoginPanel({ status, loading, error, onLogin, onLogout, 
     setCredMessage(null);
     try {
       const result = await window.api.auth.credentialLogin(email, password);
-      if (result.needOtp) {
-        setNeedOtp(true);
-        setCredMessage("이메일로 OTP 코드가 발송되었습니다. 확인 후 입력해주세요.");
-      } else if (!result.success) {
+      if (!result.success) {
         setCredMessage(result.message ?? "로그인 실패");
       }
     } catch (err) {
@@ -62,28 +68,8 @@ export default function LoginPanel({ status, loading, error, onLogin, onLogout, 
     }
   };
 
-  const handleSubmitOtp = async () => {
-    if (!otpCode || otpCode.length !== 6) return;
-    setCredLoading(true);
-    setCredMessage(null);
-    try {
-      const result = await window.api.auth.submitOtp(otpCode);
-      if (result.success) {
-        setNeedOtp(false);
-        setOtpCode("");
-        setEmail("");
-        setPassword("");
-      } else {
-        setCredMessage(result.message ?? "OTP 인증 실패");
-      }
-    } catch (err) {
-      setCredMessage(err instanceof Error ? err.message : "OTP 인증 오류");
-    } finally {
-      setCredLoading(false);
-    }
-  };
-
   const isActive = !loading && !status.isLoggedIn && !credLoading;
+  const tabsDisabled = credLoading || loading || lockedByEnv;
 
   return (
     <section className="card" aria-labelledby="login-heading">
@@ -122,6 +108,27 @@ export default function LoginPanel({ status, loading, error, onLogin, onLogout, 
         </p>
       )}
 
+      {/* D-07: tabs render regardless of login state — changing mode never
+          touches the current session (status badge above stays untouched). */}
+      <div className="login-mode-tabs" style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+        <button
+          className={`btn ${loginMode === "api" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => onSetLoginMode("api")}
+          style={{ flex: 1, fontSize: "0.8rem", padding: "0.35rem 0.5rem" }}
+          disabled={tabsDisabled}
+        >
+          API 로그인
+        </button>
+        <button
+          className={`btn ${loginMode === "browser" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => onSetLoginMode("browser")}
+          style={{ flex: 1, fontSize: "0.8rem", padding: "0.35rem 0.5rem" }}
+          disabled={tabsDisabled}
+        >
+          브라우저 로그인
+        </button>
+      </div>
+
       {status.isLoggedIn && (
         <div className="button-row" style={{ gap: "0.5rem" }}>
           <button
@@ -155,26 +162,7 @@ export default function LoginPanel({ status, loading, error, onLogin, onLogout, 
 
       {!status.isLoggedIn && (
         <>
-          <div className="login-mode-tabs" style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
-            <button
-              className={`btn ${mode === "credential" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => { setMode("credential"); setNeedOtp(false); setCredMessage(null); }}
-              style={{ flex: 1, fontSize: "0.8rem", padding: "0.35rem 0.5rem" }}
-              disabled={credLoading || loading}
-            >
-              이메일 로그인
-            </button>
-            <button
-              className={`btn ${mode === "browser" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => { setMode("browser"); setNeedOtp(false); setCredMessage(null); }}
-              style={{ flex: 1, fontSize: "0.8rem", padding: "0.35rem 0.5rem" }}
-              disabled={credLoading || loading}
-            >
-              브라우저 로그인
-            </button>
-          </div>
-
-          {mode === "credential" && !needOtp && (
+          {loginMode === "api" && (
             <>
               <div className="form-field">
                 <label className="form-label" htmlFor="login-email">이메일</label>
@@ -219,53 +207,7 @@ export default function LoginPanel({ status, loading, error, onLogin, onLogout, 
             </>
           )}
 
-          {mode === "credential" && needOtp && (
-            <>
-              <p className="muted" style={{ marginBottom: "0.5rem" }}>
-                이메일로 발송된 6자리 OTP 코드를 입력해주세요.
-              </p>
-              <div className="form-field">
-                <label className="form-label" htmlFor="login-otp">OTP 코드</label>
-                <input
-                  id="login-otp"
-                  className="form-input"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="6자리 코드"
-                  disabled={credLoading}
-                  autoFocus
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSubmitOtp(); }}
-                />
-              </div>
-              {credMessage && (
-                <p className={credMessage.includes("발송") ? "success-message" : "error-message"} role="alert">
-                  {credMessage}
-                </p>
-              )}
-              <div className="button-row">
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSubmitOtp}
-                  disabled={credLoading || otpCode.length !== 6}
-                  aria-busy={credLoading}
-                >
-                  {credLoading ? "인증 중..." : "OTP 인증"}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => { setNeedOtp(false); setOtpCode(""); setCredMessage(null); }}
-                  disabled={credLoading}
-                >
-                  취소
-                </button>
-              </div>
-            </>
-          )}
-
-          {mode === "browser" && (
+          {loginMode === "browser" && (
             <div className="button-row">
               <button
                 className="btn btn-primary"

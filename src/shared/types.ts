@@ -224,6 +224,20 @@ export interface TimeSyncResult {
   localTime: Date;     // local clock at midpoint of request
 }
 
+// ── Login mode & settings (Phase 06, R016/R021) ────────────────────────────
+
+export type LoginMode = "api" | "browser";
+
+export interface LoginModeSnapshot {
+  mode: LoginMode;
+  lockedByEnv: boolean;
+}
+
+export interface NoticeAckSnapshot {
+  ackedVersion: number | null;
+  currentVersion: number;
+}
+
 // ── Existing types ────────────────────────────────────────────────────────
 
 export interface AuthStatus {
@@ -286,6 +300,12 @@ export interface IpcApi {
   log: {
     onEntry: (cb: (entry: LogEntry) => void) => () => void;
     download: () => Promise<{ saved: boolean; filePath?: string }>;
+  };
+  settings: {
+    getLoginMode: () => Promise<LoginModeSnapshot>;
+    setLoginMode: (mode: LoginMode) => Promise<void>;
+    getNoticeAck: () => Promise<NoticeAckSnapshot>;
+    ackNotice: (version: number) => Promise<void>;
   };
   onAuthEvent: (cb: (event: AuthEvent) => void) => () => void;
   onApplyEvent: (cb: (event: ApplyEvent) => void) => () => void;

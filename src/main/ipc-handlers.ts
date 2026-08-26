@@ -2,10 +2,11 @@ import { ipcMain, BrowserWindow, dialog } from "electron";
 import * as fs from "fs";
 import { authService } from "./services/auth-service";
 import { profileStore } from "./services/profile-store";
+import { settingsStore } from "./services/settings-store";
 import { applyEngine } from "./services/apply-engine";
 import { logService } from "./services/log-service";
 import { resolveLoginMode } from "./login-mode";
-import type { AuthEvent, ApplyEvent, Profile, LogEntry } from "../shared/types";
+import type { AuthEvent, ApplyEvent, Profile, LogEntry, LoginMode } from "../shared/types";
 
 let mainWindowRef: BrowserWindow | null = null;
 
@@ -118,6 +119,22 @@ export function registerIpcHandlers(): void {
     applyEngine.verifyApplication(eventId)
   );
 
+  // settings:get-login-mode — resolved mode (env override > persisted) + lock flag (D-06)
+  ipcMain.handle("settings:get-login-mode", async () => settingsStore.getLoginModeSnapshot());
+
+  // settings:set-login-mode — persist the user-selected mode
+  ipcMain.handle("settings:set-login-mode", async (_evt, mode: LoginMode) => {
+    settingsStore.setLoginMode(mode);
+  });
+
+  // settings:get-notice-ack — API mode notice acknowledgement state
+  ipcMain.handle("settings:get-notice-ack", async () => settingsStore.getNoticeAck());
+
+  // settings:ack-notice — record that the user acknowledged the API mode notice
+  ipcMain.handle("settings:ack-notice", async (_evt, version: number) => {
+    settingsStore.ackNotice(version);
+  });
+
   // log:download — SaveDialog → fs.copyFile to user-chosen destination
   ipcMain.handle("log:download", async () => {
     const srcPath = logService.getLogFilePath();
@@ -153,5 +170,9 @@ export function unregisterIpcHandlers(): void {
   ipcMain.removeHandler("apply:state");
   ipcMain.removeHandler("apply:reset");
   ipcMain.removeHandler("apply:verify");
+  ipcMain.removeHandler("settings:get-login-mode");
+  ipcMain.removeHandler("settings:set-login-mode");
+  ipcMain.removeHandler("settings:get-notice-ack");
+  ipcMain.removeHandler("settings:ack-notice");
   ipcMain.removeHandler("log:download");
 }

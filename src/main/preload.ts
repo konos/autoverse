@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { Profile, AuthEvent, ApplyEvent, LogEntry, IpcApi, CredentialLoginResult } from "../shared/types";
+import type {
+  Profile,
+  AuthEvent,
+  ApplyEvent,
+  LogEntry,
+  IpcApi,
+  CredentialLoginResult,
+  LoginMode,
+  LoginModeSnapshot,
+  NoticeAckSnapshot,
+} from "../shared/types";
 
 const api: IpcApi = {
   auth: {
@@ -35,6 +45,12 @@ const api: IpcApi = {
       return () => ipcRenderer.removeListener("log:entry", handler);
     },
     download: () => ipcRenderer.invoke("log:download"),
+  },
+  settings: {
+    getLoginMode: (): Promise<LoginModeSnapshot> => ipcRenderer.invoke("settings:get-login-mode"),
+    setLoginMode: (mode: LoginMode): Promise<void> => ipcRenderer.invoke("settings:set-login-mode", mode),
+    getNoticeAck: (): Promise<NoticeAckSnapshot> => ipcRenderer.invoke("settings:get-notice-ack"),
+    ackNotice: (version: number): Promise<void> => ipcRenderer.invoke("settings:ack-notice", version),
   },
   onAuthEvent: (cb: (event: AuthEvent) => void) => {
     const handler = (_: Electron.IpcRendererEvent, event: AuthEvent) => cb(event);

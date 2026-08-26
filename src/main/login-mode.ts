@@ -6,21 +6,41 @@
  * trim + lowercase) switches to API mode — every other value, including
  * unset, falls back to `"browser"`.
  *
- * This function takes `env` as a parameter (not a global `process.env`
- * read) so Phase 06 can swap the body for a persisted-setting lookup
- * without changing the call sites, and so tests can pass a fake env
- * object without mutating global process state.
+ * Phase 06: `resolveLoginMode()` now accepts an optional second parameter,
+ * `persistedMode` — the value the user chose and `SettingsStore` persisted
+ * to `settings.json`. Priority is: env override (`AUTOVERSE_LOGIN_MODE`,
+ * dev/QA only) > persisted user selection > `"browser"` default (D-06).
+ * `isLoginModeLockedByEnv()` reports whether the env override is active,
+ * without exposing its raw string value, so the renderer can show a lock
+ * badge while never leaking the env content (T-06-03).
  */
-export type LoginMode = "api" | "browser";
+import type { LoginMode } from "../shared/types";
+
+export type { LoginMode };
 
 export const LOGIN_MODE_ENV = "AUTOVERSE_LOGIN_MODE";
 
 export function resolveLoginMode(
   env: NodeJS.ProcessEnv = process.env,
+  persistedMode?: LoginMode,
 ): LoginMode {
   const raw = env[LOGIN_MODE_ENV];
-  if (typeof raw === "string" && raw.trim().toLowerCase() === "api") {
+  // A non-empty env value is a full override — it wins even when it
+  // explicitly says "browser" while the user persisted "api" (D-06: env
+  // is a dev/QA override, not merely an "api" trigger).
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    return raw.trim().toLowerCase() === "api" ? "api" : "browser";
+  }
+  if (persistedMode === "api") {
     return "api";
   }
   return "browser";
+}
+
+/** True whenever AUTOVERSE_LOGIN_MODE has any non-empty value — including typos. */
+export function isLoginModeLockedByEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const raw = env[LOGIN_MODE_ENV];
+  return typeof raw === "string" && raw.trim().length > 0;
 }

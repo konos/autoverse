@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AuthStatus, AuthEvent, FormSchema } from "../shared/types";
+import type { AuthStatus, AuthEvent, FormSchema, LoginMode } from "../shared/types";
 import LoginPanel from "./components/LoginPanel";
 import ProfileForm from "./components/ProfileForm";
 import EventSetup from "./components/EventSetup";
@@ -16,11 +16,18 @@ export default function App() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [step, setStep] = useState<AppStep>("login");
   const [formSchema, setFormSchema] = useState<FormSchema | null>(null);
+  const [loginMode, setLoginModeState] = useState<LoginMode>("browser");
+  const [lockedByEnv, setLockedByEnv] = useState(false);
 
   useEffect(() => {
     window.api.auth.getStatus().then((s) => {
       setAuthStatus(s);
       if (s.isLoggedIn) setStep("profile");
+    });
+
+    window.api.settings.getLoginMode().then((snapshot) => {
+      setLoginModeState(snapshot.mode);
+      setLockedByEnv(snapshot.lockedByEnv);
     });
 
     const unsubscribe = window.api.onAuthEvent((event: AuthEvent) => {
@@ -102,6 +109,20 @@ export default function App() {
     }
   };
 
+  // D-07: mode changes never touch authStatus/step — the current session
+  // (login state, token, fanId) survives a login-mode change untouched.
+  // Local state updates only after the IPC write succeeds, so a failed
+  // write leaves the previously-selected tab visibly active (Task 3 adds
+  // the failure message on top of this success-only-update ordering).
+  const handleSetLoginMode = async (mode: LoginMode) => {
+    try {
+      await window.api.settings.setLoginMode(mode);
+      setLoginModeState(mode);
+    } catch (err) {
+      console.error("로그인 방식 설정 저장 실패:", err);
+    }
+  };
+
   const handleProfileSaved = () => {
     setStep("event-setup");
   };
@@ -131,6 +152,9 @@ export default function App() {
         onLogin={handleLogin}
         onLogout={handleLogout}
         onValidateToken={handleValidateToken}
+        loginMode={loginMode}
+        lockedByEnv={lockedByEnv}
+        onSetLoginMode={handleSetLoginMode}
       />
 
       {step === "profile" && authStatus.isLoggedIn && authStatus.fanId !== undefined && (
