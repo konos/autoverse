@@ -42,6 +42,8 @@ vi.mock("electron", () => ({
 import { BrowserWindow } from "electron";
 import { AuthService } from "../auth-service";
 import { ApiAuthClient } from "../api-auth-client";
+import type { LoginFailureReason } from "../../../shared/login-failure";
+import type { AuthEvent, CredentialLoginResult } from "../../../shared/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -513,5 +515,134 @@ describe("AuthService.attachAccountTokenCapture", () => {
     expect(dbg.on).toHaveBeenCalledWith("detach", expect.any(Function));
     expect(dbg.on).toHaveBeenCalledWith("message", expect.any(Function));
     expect(dbg.sendCommand).toHaveBeenCalledWith("Network.enable");
+  });
+});
+
+// ── 실패 안내 회귀 (Task 3, D-13/D-14/R010) ──────────────────────────────
+//
+// credentialLogin() 자체는 실제 헤드리스 BrowserWindow DOM 흐름 없이는 태울 수
+// 없다(이 저장소에는 DOM 테스트 환경이 없다). 대신 credentialLogin() 이 내부적으로
+// 위임하는 두 private 메서드(buildFailureResult / buildLadderFailureEvent)를 직접
+// 호출하는 계약 테스트로 대체한다 — 마스킹을 적용하는 책임이 이 파일(auth-service.ts)에
+// 있으므로(06-RESEARCH.md Pitfall 2), 마스킹 회귀 케이스는 반드시 여기서 검증한다.
+
+interface PrivateFailureBuilders {
+  buildFailureResult(
+    rawSignal: string | null,
+    overrideReason?: LoginFailureReason,
+    overrideDetail?: string,
+  ): CredentialLoginResult;
+  buildLadderFailureEvent(detail: string): AuthEvent;
+}
+
+function asFailureBuilders(service: AuthService): PrivateFailureBuilders {
+  return service as unknown as PrivateFailureBuilders;
+}
+
+const ALL_LOGIN_FAILURE_REASONS: LoginFailureReason[] = [
+  "captcha",
+  "form-error",
+  "timeout",
+  "network-error",
+  "token-ladder-failed",
+  "unknown",
+];
+
+describe("AuthService.buildFailureResult — DOM 신호 분류 + 마스킹 관문 (D-13/D-14/R010)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("캡차 신호(raw='captcha') → reason 'captcha' + 브라우저 로그인 전환 안내", () => {
+    const service = new AuthService();
+    const result = asFailureBuilders(service).buildFailureResult("captcha");
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("captcha");
+    expect(result.message).toContain("브라우저 로그인");
+  });
+
+  it("타임아웃 신호(raw='timeout') → reason 'timeout'", () => {
+    const service = new AuthService();
+    const result = asFailureBuilders(service).buildFailureResult("timeout");
+
+    expect(result.reason).toBe("timeout");
+  });
+
+  it.each(ALL_LOGIN_FAILURE_REASONS)(
+    "사유 '%s' 는 반증된 이메일 인증코드 서사(오지 않을 메일 안내)를 포함하지 않는다",
+    (reason) => {
+      const service = new AuthService();
+      const result = asFailureBuilders(service).buildFailureResult(null, reason, "detail");
+
+      expect(result.message).not.toMatch(/이메일로.*코드|인증코드가 발송|OTP/);
+    },
+  );
+
+  it("토큰 형태 문자열을 담은 예외 detail 은 identifier 에 마스킹된 형태로만 남는다 (R010 회귀, T-06-17 계열)", () => {
+    const service = new AuthService();
+    const tokenLike = "a".repeat(150);
+    const result = asFailureBuilders(service).buildFailureResult(
+      null,
+      "network-error",
+      `accessToken=${tokenLike}`,
+    );
+
+    expect(result.identifier).toBeDefined();
+    expect(result.identifier).not.toContain(tokenLike);
+    expect(result.message).not.toContain(tokenLike);
+  });
+
+  it("폼 오류 message 에 토큰 형태 문자열이 섞여도 maskSensitive() 를 거쳐 원문이 남지 않는다 (R010 회귀)", () => {
+    const service = new AuthService();
+    const tokenLike = "a".repeat(50);
+    const result = asFailureBuilders(service).buildFailureResult(
+      null,
+      "form-error",
+      `accessToken=${tokenLike} 로그인 실패`,
+    );
+
+    expect(result.message).not.toContain(tokenLike);
+  });
+
+  it("캡차·타임아웃 사유의 반환 객체에는 identifier 속성 자체가 없다 (undefined 렌더링 차단)", () => {
+    const service = new AuthService();
+    expect("identifier" in asFailureBuilders(service).buildFailureResult("captcha")).toBe(false);
+    expect("identifier" in asFailureBuilders(service).buildFailureResult("timeout")).toBe(false);
+  });
+
+  it("사다리 실패(token-ladder-failed) → 사다리 안내 문구 + identifier 보존", () => {
+    const service = new AuthService();
+    const result = asFailureBuilders(service).buildFailureResult(
+      null,
+      "token-ladder-failed",
+      "ApiAuthError: rung1",
+    );
+
+    expect(result.message).toContain("서비스 이용에 필요한 토큰");
+    expect(result.identifier).toBe("ApiAuthError: rung1");
+  });
+});
+
+describe("AuthService.buildLadderFailureEvent — 사다리 실패가 사용자에게 도달한다 (D-12)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("login-failed 타입 이벤트를 반환하고 message 가 사다리 실패 안내 문구다", () => {
+    const service = new AuthService();
+    const event = asFailureBuilders(service).buildLadderFailureEvent("ApiAuthError: rung1");
+
+    expect(event.type).toBe("login-failed");
+    expect(event.message).toContain("서비스 이용에 필요한 토큰");
+  });
+
+  it("식별자가 문장 뒤에 마스킹된 형태로 병기된다 (비동기 이벤트 경로 — 구조화 필드 자리 없음)", () => {
+    const service = new AuthService();
+    const tokenLike = "b".repeat(150);
+    const event = asFailureBuilders(service).buildLadderFailureEvent(`accessToken=${tokenLike}`);
+
+    expect(event.message).toContain("(식별자:");
+    expect(event.message).not.toContain(tokenLike);
   });
 });
