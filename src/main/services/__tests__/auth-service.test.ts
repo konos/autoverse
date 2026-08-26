@@ -169,25 +169,42 @@ describe("AuthService.getStatus", () => {
 });
 
 
-// ── tryAutoLogin API mode gate (05-01 결함 A 수정) ────────────────────────
+// ── 무인 로그인 차단 (두 모드 공통, D-03) ──────────────────────────────────
+//
+// Phase 06 Plan 04 재정의: 가드 조건이 *모드*("API 모드는 매 로그인마다 OTP
+// 강제")에서 *"외부에 로그인 요청을 발생시키는가"*로 바뀌었다. 05-01의 반증
+// (HAR 호출 0건)으로 옛 사유는 무효화됐고, 동시에 D-01이 지정한 API 모드의
+// 실체(credentialLogin 헤드리스 경로)를 막는 모순 상태였다. 이 describe 는
+// 저장된 자격증명으로의 무인 로그인은 두 모드 모두에서 차단되고, 살아있는
+// 쿠키 토큰으로의 세션 복원은 두 모드 모두에서 허용됨을 검증한다.
 
-describe("AuthService.tryAutoLogin API 모드 게이트", () => {
+interface PrivateCredentialsAccess {
+  loadCredentials(): { email: string; password: string } | null;
+}
+
+describe("AuthService.tryAutoLogin — 무인 로그인 차단 (두 모드 공통)", () => {
   const ENV_KEY = "AUTOVERSE_LOGIN_MODE";
   let originalEnv: string | undefined;
 
   beforeEach(() => {
     originalEnv = process.env[ENV_KEY];
+    cookieFixtureBox.current = [];
   });
 
   afterEach(() => {
     if (originalEnv === undefined) delete process.env[ENV_KEY];
     else process.env[ENV_KEY] = originalEnv;
     vi.restoreAllMocks();
+    cookieFixtureBox.current = [];
   });
 
-  it("API 모드에서는 credentialLogin(헤드리스) 을 호출하지 않고 즉시 false 를 반환한다", async () => {
+  it("API 모드 + 저장된 자격증명 있음 → credentialLogin(헤드리스) 을 호출하지 않고 false 를 반환한다", async () => {
     process.env[ENV_KEY] = "api";
     const service = new AuthService();
+    vi.spyOn(
+      service as unknown as PrivateCredentialsAccess,
+      "loadCredentials",
+    ).mockReturnValue({ email: "stored@example.com", password: "stored-pw" });
     const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
 
     const result = await service.tryAutoLogin();
@@ -196,9 +213,13 @@ describe("AuthService.tryAutoLogin API 모드 게이트", () => {
     expect(credentialLoginSpy).not.toHaveBeenCalled();
   });
 
-  it('"API" (대문자) 도 게이트를 발동시킨다 — resolveLoginMode 의 폴백 규칙과 일치', async () => {
-    process.env[ENV_KEY] = "API";
+  it("브라우저 모드 + 저장된 자격증명 있음 → credentialLogin(헤드리스) 을 호출하지 않는다 (D-03 핵심 회귀 — 이전에는 호출했다)", async () => {
+    delete process.env[ENV_KEY];
     const service = new AuthService();
+    vi.spyOn(
+      service as unknown as PrivateCredentialsAccess,
+      "loadCredentials",
+    ).mockReturnValue({ email: "stored@example.com", password: "stored-pw" });
     const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
 
     const result = await service.tryAutoLogin();
@@ -207,19 +228,76 @@ describe("AuthService.tryAutoLogin API 모드 게이트", () => {
     expect(credentialLoginSpy).not.toHaveBeenCalled();
   });
 
-  it("브라우저 모드(환경변수 미설정)에서는 게이트가 동작하지 않는다 — 기존 동작 무변경 (D-01 회귀 확인)", async () => {
+  it("두 모드 모두 저장된 자격증명이 없으면 false 를 반환하고 사용자 개입이 필요함을 로그로 남긴다", async () => {
     delete process.env[ENV_KEY];
     const service = new AuthService();
     const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
 
-    // No stored credentials in the mocked userData dir → falls through to
-    // "no stored credentials" branch, but crucially it MUST have reached
-    // past the cookie check without throwing (proves the gate did not
-    // fire) and credentialLogin is simply never called because there are
-    // no creds to use — same as pre-Phase-05 behavior.
     const result = await service.tryAutoLogin();
 
     expect(result).toBe(false);
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+
+  it("두 모드 모두 쿠키에 살아있는 토큰이 있으면 true 를 반환한다 (세션 복원 허용, 무인 로그인 아님)", async () => {
+    process.env[ENV_KEY] = "api";
+    cookieFixtureBox.current = [
+      { name: "we2_access_token", value: makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }), domain: "weverse.io" },
+    ];
+    const service = new AuthService();
+    // extractTokenFromCookies() fire-and-forgets validateToken() — stub it so
+    // no real network fetch is attempted (safety: no live Weverse requests).
+    vi.spyOn(service, "validateToken").mockResolvedValue({ isLoggedIn: true });
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await service.tryAutoLogin();
+
+    expect(result).toBe(true);
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── trySessionRestore (구 tryAutoRelogin 의 정직한 후신, D-03) ─────────────
+
+describe("AuthService.trySessionRestore — 무인 로그인 없이 세션 복원만 시도", () => {
+  interface PrivateSessionRestore {
+    trySessionRestore(): Promise<boolean>;
+  }
+
+  beforeEach(() => {
+    cookieFixtureBox.current = [];
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cookieFixtureBox.current = [];
+  });
+
+  it("저장된 자격증명이 있어도 credentialLogin(헤드리스) 을 호출하지 않는다", async () => {
+    const service = new AuthService();
+    vi.spyOn(
+      service as unknown as PrivateCredentialsAccess,
+      "loadCredentials",
+    ).mockReturnValue({ email: "stored@example.com", password: "stored-pw" });
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await (service as unknown as PrivateSessionRestore).trySessionRestore();
+
+    expect(result).toBe(false);
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+
+  it("쿠키에 살아있는 토큰이 있으면 true 를 반환한다 (세션 복원 성공)", async () => {
+    cookieFixtureBox.current = [
+      { name: "we2_access_token", value: makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }), domain: "weverse.io" },
+    ];
+    const service = new AuthService();
+    vi.spyOn(service, "validateToken").mockResolvedValue({ isLoggedIn: true });
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await (service as unknown as PrivateSessionRestore).trySessionRestore();
+
+    expect(result).toBe(true);
     expect(credentialLoginSpy).not.toHaveBeenCalled();
   });
 });
