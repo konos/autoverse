@@ -4,17 +4,17 @@ milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
-status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-08-26T05:50:37.772Z"
+status: verifying
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-08-26T05:58:16.806Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: febd91a242af4a8005e6d2eda32db5aa654f91e3
+state_head: 63f8c04b377e007bbcc221cdc75369c49bf11eb5
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
   percent: 33
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-26 — Phase 06 execution started
 
 **Phase 05 결과 (완료 2026-08-25):** R019 사다리는 **rung1(직접 사용)이 실계정에서 성립**함을 1회 관측으로 확인했다 (계정 도메인 쿠키 JWT → `/fans/me` 200 + fanId). rung2(명시적 교환)는 미실행으로 여전히 미검증이다. 로그인 방식 최종 결정(D-04)은 Phase 06 에서 이 결과를 근거로 내린다.
@@ -81,6 +81,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06 P04 | 42min | 3 tasks | 7 files |
 | Phase 06 P05 | 25min | 3 tasks | 5 files |
 | Phase 06 P06 | 11 min | 3 tasks | 7 files |
+| Phase 06 P07 | 12min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,8 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06] buildFailureResult()를 R010 마스킹의 단일 관문으로 신설 — CredentialLoginResult.identifier 필드 추가, 사다리 실패는 buildLadderFailureEvent()로 login-failed 이벤트 발행
 - [Phase 06]: [Phase 06] 네이티브 <dialog>.showModal() 기반 차단형 고지 모달 신설 — 이 저장소 최초의 모달 컴포넌트, 확인/취소 경로를 물리적으로 분리해 Esc가 확인으로 오인되지 않게 함 — R021의 '확인해야만 진행' 요건은 비차단 표시로는 구조적으로 성립하지 않는다
 - [Phase 06]: [Phase 06] login-panel-view.ts — LoginPanel 판단 로직 5개 순수 함수를 실제 모듈로 만들고 테스트가 이를 직접 import — 기존 복제본 테스트 관례에서 의도적으로 벗어남 — 복제본이 아니라 배포되는 코드를 검증하기 위함
+- [Phase 06]: [Phase 06] phase 게이트(vitest 315/315 + typecheck×2 + build) green 확인, 06-VALIDATION.md 실제 상태로 갱신 완료
+- [Phase 06]: [Phase 06] 수동 UAT 4항목(R016/R020/R021) 중 선택 영속(양방향)만 부분 확인 — API→재시작 방향은 06-01 tracer로 확인됨, 나머지(반대 방향·최초 고지 차단·환경변수 잠금·실패 안내)는 사용자 UAT 대기
 
 ### Pending Todos
 
@@ -131,6 +134,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T05:50:37.715Z
-Stopped at: Completed 06-06-PLAN.md
+Last session: 2026-08-26T05:58:16.739Z
+Stopped at: Completed 06-07-PLAN.md
 Resume file: None
