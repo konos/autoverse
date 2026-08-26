@@ -90,7 +90,7 @@
      폼 오류 / 타임아웃 / 네트워크·런타임 오류 / 토큰 사다리 실패 / 미매핑)를 사용자가 이해할 수
      있는 한국어 설명 문구로 표시한다.
 
-**Plans**: 7/7 plans executed (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계) + 3 gap closure plans (06-08 ~ 06-10, 2026-08-26 계획 — 06-VERIFICATION.md gaps_found 대응)
+**Plans**: 9/10 plans executed (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계) + 3 gap closure plans (06-08 ~ 06-10, 2026-08-26 계획 — 06-VERIFICATION.md gaps_found 대응)
 **UI hint**: yes
 
 **Wave 1** *(병렬 3개 — 파일 겹침 없음)*
@@ -155,5 +155,5 @@ Phases execute in numeric order: 05 → 06 → 07
 | 03. s03 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 04. s04 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 05. API 로그인 핵심 흐름 + 토큰 교환 검증 | v0.3.0 | 3/3 | Complete    | 2026-08-25 |
-| 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 7/7 | In Progress|  |
+| 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 9/10 | In Progress|  |
 | 07. API 자격 증명 저장 + 토큰 만료 사전 경고 | v0.3.0 | 0/TBD | Not started | - |
