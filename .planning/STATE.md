@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: executing
-stopped_at: Completed 06-08-PLAN.md
-last_updated: "2026-08-26T07:33:27.826Z"
+stopped_at: Completed 06-09-PLAN.md
+last_updated: "2026-08-26T07:47:30.046Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: 84a5de5707c8b38c57aa78dc8a7753195644e6e0
+state_head: 9103226c4732867c1480fff8a92d062cd3776dee
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 ## Current Position
 
 Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 06 execution started
 
@@ -83,6 +83,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06 P06 | 11 min | 3 tasks | 7 files |
 | Phase 06 P07 | 12min | 2 tasks | 1 files |
 | Phase 06-ui P08 | 15min | 3 tasks | 6 files |
+| Phase 06-ui P09 | 7min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06] 수동 UAT 4항목(R016/R020/R021) 중 선택 영속(양방향)만 부분 확인 — API→재시작 방향은 06-01 tracer로 확인됨, 나머지(반대 방향·최초 고지 차단·환경변수 잠금·실패 안내)는 사용자 UAT 대기
 - [Phase 06-ui]: [Phase 06 P08] CR-01 gap closure: 검증자 제안(strict setter 병렬 추가) 대신 모달 경로에서 로그인 방식 저장 함수 prop 자체를 제거 — createLoginModeActions()가 확인 흐름 전체(확인 저장→모드 저장→성패 판정)를 소유하고 LoginPanel은 반환값(AcknowledgeOutcome)만으로 분기, 재발 형태를 타입 수준에서 차단
 - [Phase 06-ui]: [Phase 06 P08] WR-01(저장 중 Esc 경합)을 gap 1과 같은 플랜에서 함께 해소 — decideNoticeCancel(saving) 순수 함수로 Cancel 버튼과 네이티브 Esc를 단일 판단 지점에 통합. IN-03은 onDiagnostic JSDoc 문서화로만, IN-04는 06-VALIDATION.md Manual-Only #2 UAT로 이관(DEFER)
+- [Phase 06]: [Phase 06-ui] [06-09] CR-02 gap closure: validateToken() 4개 실패 emit을 describeTokenValidationFailure() + emitTokenValidationFailure() 단일 관문으로 재배선 — 서버 텍스트를 담을 수 없는 타입(context: {status?:number})으로 구조적 봉인, maskSensitive() 감싸기(A안)는 SENSITIVE_PATTERNS가 key=value 문맥에만 의존해 보장하지 못하므로 기각
+- [Phase 06]: [Phase 06-ui] [06-09] 06-05-SUMMARY.md의 반증된 완료 선언(공유 경로가 '자동으로 혜택을 받는다')을 D-11 관례로 정정 — 원문 보존 + [VOID] + 정정문, phase 06 이전(커밋 816970a)부터 있던 코드임을 명시
 
 ### Pending Todos
 
@@ -137,6 +140,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T07:33:27.759Z
-Stopped at: Completed 06-08-PLAN.md
+Last session: 2026-08-26T07:47:29.981Z
+Stopped at: Completed 06-09-PLAN.md
 Resume file: None
