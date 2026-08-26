@@ -40,7 +40,7 @@ key-files:
 key-decisions:
   - "Task 1(분류)과 Task 2(마스킹/배선)의 GREEN 구현을 하나의 커밋으로 합쳤다 — CredentialLoginResult.identifier 필드가 아직 없는 상태에서 분류 로직만 먼저 커밋하면 타입 불일치 중간 상태가 생기기 때문. 두 태스크의 acceptance_criteria는 커밋 전 개별적으로 grep/vitest로 검증했다."
   - "buildLadderFailureEvent()를 별도 private 메서드로 추출 — Task 3의 회귀 테스트가 헤드리스 BrowserWindow 전체를 모킹하지 않고도 사다리 실패 이벤트의 마스킹/문구를 직접 검증할 수 있게 했다(테스트 설계는 CONTEXT/RESEARCH가 이미 권고한 방향)."
-  - "브라우저 모드(login())의 실패 안내는 이번 플랜에서 건드리지 않았다(D-08 재량 항목의 '부분 재사용' 결정) — 두 모드가 공유하는 사다리 실패/토큰 검증 경로는 이미 같은 mapLoginFailure()/emit 경로를 타므로 자동으로 혜택을 받지만, login()의 보이는 창 흐름 자체는 변경하지 않았다. 사용자가 실제 브라우저 창에서 오류를 직접 보고 있어 추가 번역의 이득이 작고, D-03이 이미 브라우저 모드 동작을 한 번 바꾼 상황에서 변경 표면을 넓히면 회귀 판정이 어려워지기 때문."
+  - "[VOID — 2026-08-26, 06-VERIFICATION.md gap 2/CR-02 반증] 브라우저 모드(login())의 실패 안내는 이번 플랜에서 건드리지 않았다(D-08 재량 항목의 '부분 재사용' 결정) — 두 모드가 공유하는 사다리 실패/토큰 검증 경로는 이미 같은 mapLoginFailure()/emit 경로를 타므로 자동으로 혜택을 받지만, login()의 보이는 창 흐름 자체는 변경하지 않았다. 사용자가 실제 브라우저 창에서 오류를 직접 보고 있어 추가 번역의 이득이 작고, D-03이 이미 브라우저 모드 동작을 한 번 바꾼 상황에서 변경 표면을 넓히면 회귀 판정이 어려워지기 때문. [정정] validateToken()의 네 emit 지점은 실제로는 mapLoginFailure()/buildFailureResult()를 거치지 않고 서버 응답 원문을 마스킹 없이 그대로 내보내고 있었다(CR-02, 06-VERIFICATION.md gap 2) — '자동으로 혜택을 받는다'는 서술은 검증되지 않은 채 틀렸다. 이 코드는 phase 06 이전(2026-05-14, 커밋 816970a)부터 있던 경로이며 06-05가 도입한 결함은 아니다. 06-09가 상태 코드 기반 확정 문구(describeTokenValidationFailure())로 대체하고 회귀 테스트를 추가해 이 경로를 해소했다(2026-08-26)."
 
 patterns-established:
   - "실패 안내 3단 파이프라인 — classify(원시 신호) → map(사유→문구) → mask(문구/식별자) — 각 단계가 별도 함수/메서드로 분리돼 있어 향후 새 실패 사유가 추가돼도 마스킹 누락 없이 동일 경로를 강제로 통과한다."
@@ -143,6 +143,17 @@ Task 3는 "주입이 지나치게 얽히면 `classifyCredentialLoginSignal()` + 
 **3. 브라우저 모드(`login()`)의 실패 안내는 건드리지 않았다 (D-08 재량 항목 결정, plan action (5) 반영).**
 
 **부분 재사용** 결정: 두 모드가 공유하는 경로(사다리 실패, 토큰 검증 실패 — `validateToken()`의 `login-failed` emit)는 이미 같은 코드 경로를 타므로 이 플랜의 수정 혜택을 자동으로 받는다. 반면 `login()` 자체의 보이는 창 흐름(`pollForToken`, `did-navigate` 핸들러)은 변경하지 않았다 — 사용자가 실제 브라우저 창에서 오류를 직접 보고 있어 추가 번역의 이득이 작고, D-03이 이미 브라우저 모드 동작(무인 자동 로그인 차단 확대)을 한 번 바꾼 상황에서 변경 표면을 넓히면 회귀 판정이 어려워지기 때문이다.
+
+> **[VOID — 2026-08-26 정정, 06-VERIFICATION.md gap 2 / 06-REVIEW.md CR-02]** 위 문단의 "두 모드가
+> 공유하는 경로 ... 이 플랜의 수정 혜택을 자동으로 받는다"는 서술은 검증되지 않은 채 틀렸다.
+> 실제 코드에서 `validateToken()`의 네 실패 emit 지점(401 세션 복원 실패, `!res.ok`, JSON 파싱
+> 실패, `fanId` 없음)은 `mapLoginFailure()`/`buildFailureResult()`를 전혀 거치지 않고, 서버 응답
+> 원문(`rawBody`) 최대 200자를 마스킹 없이 그대로 렌더러로 내보내고 있었다. 이 경로는
+> **phase 06 이전(2026-05-14, 커밋 `816970a`)부터 있던 코드**이며 이 플랜(06-05)이 도입한
+> 결함이 아니다 — 06-05의 실제 잘못은 이 사실을 코드로 검증하지 않고 "자동으로 혜택을 받는다"고
+> 선언한 것이다. `06-09-PLAN.md`가 `src/shared/token-validation-failure.ts`의
+> `describeTokenValidationFailure()`로 네 지점을 상태 코드 기반 확정 한국어 문구로 재배선하고
+> 회귀 테스트로 잠가 이 경로를 해소했다.
 
 ## R020/동시성 가정 (planner_assumptions, 그대로 옮김)
 
