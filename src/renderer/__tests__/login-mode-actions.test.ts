@@ -81,3 +81,36 @@ describe("createLoginModeActions — setLoginMode (탭 클릭 경로)", () => {
     expect(deps.onModeApplied).not.toHaveBeenCalled();
   });
 });
+
+describe("createLoginModeActions — 확인 경로 실패 시 상태 무결성 (T-06-31)", () => {
+  it("Test 5: 확인 경로에서 모드 저장이 실패하면 onModeApplied 는 호출되지 않는다", async () => {
+    const deps = makeDeps({ persistLoginMode: vi.fn<(mode: LoginMode) => Promise<void>>().mockRejectedValue(new Error("disk write failed")) });
+    const actions = createLoginModeActions(deps);
+
+    await actions.acknowledgeApiModeNotice(1);
+
+    expect(deps.onModeApplied).not.toHaveBeenCalled();
+  });
+
+  it("Test 6: 확인 경로에서 모드 저장이 실패해도 onNoticeAcked 는 이미 호출된 상태다 (어긋난 상태가 관측 가능하다 — gap 1 의 핵심)", async () => {
+    const deps = makeDeps({ persistLoginMode: vi.fn<(mode: LoginMode) => Promise<void>>().mockRejectedValue(new Error("disk write failed")) });
+    const actions = createLoginModeActions(deps);
+
+    await actions.acknowledgeApiModeNotice(1);
+
+    expect(deps.onNoticeAcked).toHaveBeenCalledTimes(1);
+    expect(deps.onNoticeAcked).toHaveBeenCalledWith(1);
+  });
+
+  it("Test 7: 확인 경로의 성공/실패 어느 쪽에서도 onBannerError 로 탭 경로 확정 문구가 나가지 않는다 (모달 안 실패를 상단 배너로 중복 표시하지 않는다)", async () => {
+    const failDeps = makeDeps({ persistLoginMode: vi.fn<(mode: LoginMode) => Promise<void>>().mockRejectedValue(new Error("disk write failed")) });
+    const failActions = createLoginModeActions(failDeps);
+    await failActions.acknowledgeApiModeNotice(1);
+    expect(failDeps.onBannerError).not.toHaveBeenCalledWith(LOGIN_MODE_SAVE_ERROR);
+
+    const okDeps = makeDeps();
+    const okActions = createLoginModeActions(okDeps);
+    await okActions.acknowledgeApiModeNotice(1);
+    expect(okDeps.onBannerError).not.toHaveBeenCalledWith(LOGIN_MODE_SAVE_ERROR);
+  });
+});
