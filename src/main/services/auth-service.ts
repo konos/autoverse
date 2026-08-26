@@ -409,15 +409,7 @@ export class AuthService extends EventEmitter {
         void this.runAccountTokenLadderSpike("credentialLogin")
           .then((spikeResult) => {
             if (spikeResult.verdict === "fail") {
-              const failureResult = this.buildFailureResult(null, "token-ladder-failed", spikeResult.reason);
-              this._emit({
-                type: "login-failed",
-                message:
-                  failureResult.identifier !== undefined
-                    ? `${failureResult.message} (식별자: ${failureResult.identifier})`
-                    : (failureResult.message ?? "로그인 실패"),
-                timestamp: Date.now(),
-              });
+              this._emit(this.buildLadderFailureEvent(spikeResult.reason));
             }
           })
           .catch((err) => {
@@ -426,15 +418,7 @@ export class AuthService extends EventEmitter {
               "AuthService",
               `runAccountTokenLadderSpike(credentialLogin) failed: ${rawDetail}`,
             );
-            const failureResult = this.buildFailureResult(null, "token-ladder-failed", rawDetail);
-            this._emit({
-              type: "login-failed",
-              message:
-                failureResult.identifier !== undefined
-                  ? `${failureResult.message} (식별자: ${failureResult.identifier})`
-                  : (failureResult.message ?? "로그인 실패"),
-              timestamp: Date.now(),
-            });
+            this._emit(this.buildLadderFailureEvent(rawDetail));
           });
         this.cleanupHeadless();
         return { success: true };
@@ -520,6 +504,22 @@ export class AuthService extends EventEmitter {
       result.identifier = maskSensitive(guidance.identifier);
     }
     return result;
+  }
+
+  /**
+   * D-12 사다리 실패 행 — 로그인 자체는 성공했지만 `acquireFaneventToken()` 사다리가
+   * 실패한 경우의 `login-failed` 이벤트를 만든다. 구조화된 필드를 실을 자리가 없는
+   * 비동기 이벤트 경로이므로 식별자를 문장 뒤에 `(식별자: ...)` 형태로 병기한다
+   * (구조화된 `CredentialLoginResult.identifier` 필드를 쓰는 동기 반환 경로와는
+   * 다른 처리 방식 — 두 경로 모두 `buildFailureResult()`를 거쳐 마스킹을 통과한다).
+   */
+  private buildLadderFailureEvent(detail: string): AuthEvent {
+    const failureResult = this.buildFailureResult(null, "token-ladder-failed", detail);
+    const message =
+      failureResult.identifier !== undefined
+        ? `${failureResult.message} (식별자: ${failureResult.identifier})`
+        : (failureResult.message ?? "로그인 실패");
+    return { type: "login-failed", message, timestamp: Date.now() };
   }
 
   private async extractTokenFromCookies(): Promise<boolean> {
