@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-08-26T05:18:56.103Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-08-26T05:34:25.172Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: b2feb2daa9afc33576cf44c9743e8d2971016f2d
+state_head: 1b21c0b48bf6a0cc0480bd72e13b0b89228ff0b2
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 10
-  completed_plans: 7
+  completed_plans: 8
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 ## Current Position
 
 Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 06 execution started
 
@@ -79,6 +79,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06 P02 | 15min | 2 tasks | 2 files |
 | Phase 06-ui P03 | 12min | 2 tasks | 2 files |
 | Phase 06 P04 | 42min | 3 tasks | 7 files |
+| Phase 06 P05 | 25min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06] R020/R021과 ROADMAP Phase 06 SC2/SC3의 반증된 서술을 VOID 마킹 + 정정문 병기로 처리(D-11) — 삭제 대신 원문 보존 원칙 준수. SC1에는 D-03 의도적 편차(브라우저 모드 무인 자동 로그인 제거) 주석 추가로 verify 단계의 회귀 오판 예방
 - [Phase 06]: R016/R020 확대 삭제(D-02): AuthService.submitOtp()/ApiAuthClient.verifyOtp() 및 부속을 CONTEXT 명시 목록 밖까지 삭제 — 사용자가 사전 확인 질문에 '플랜대로 전부 삭제'로 승인
 - [Phase 06]: D-03: tryAutoLogin()/tryAutoRelogin() 게이트를 모드 조건에서 외부 로그인 요청 발생 조건으로 재정의, tryAutoRelogin()을 trySessionRestore()로 개명 — 브라우저 모드에도 무인 로그인 차단 확대(로드맵 SC1 의도적 편차)
+- [Phase 06]: [Phase 06] classifyCredentialLoginSignal()로 캡차→OTP 오진(D-13) 수정 — DOM 신호 분류를 auth-service.ts 곳곳의 if 대신 단일 순수 함수로 고정
+- [Phase 06]: [Phase 06] buildFailureResult()를 R010 마스킹의 단일 관문으로 신설 — CredentialLoginResult.identifier 필드 추가, 사다리 실패는 buildLadderFailureEvent()로 login-failed 이벤트 발행
 
 ### Pending Todos
 
@@ -125,6 +128,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T05:18:56.006Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-08-26T05:34:25.107Z
+Stopped at: Completed 06-05-PLAN.md
 Resume file: None
