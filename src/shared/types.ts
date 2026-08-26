@@ -263,7 +263,6 @@ export interface AuthEvent {
     | "token-expired"
     | "token-validated"
     | "cookie-extraction-failed"
-    | "otp-required"
     | "credential-login-progress"
     | "logged-out";
   message?: string;
@@ -274,6 +273,13 @@ export interface CredentialLoginResult {
   success: boolean;
   message?: string;
   reason?: LoginFailureReason;
+  /**
+   * 마스킹을 통과한 식별자 — 렌더러가 별도의 작은 칩으로 렌더링한다
+   * (UI-SPEC "Identifier format"). network-error/token-ladder-failed/unknown
+   * 사유에서만 존재하고, captcha/timeout/form-error 사유에서는 필드 자체가
+   * 없다(undefined 문자열이 화면에 찍히는 렌더링을 구조적으로 차단, R010).
+   */
+  identifier?: string;
 }
 
 export interface IpcApi {

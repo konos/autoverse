@@ -35,6 +35,47 @@ export interface LoginFailureGuidance {
 export const FORM_ERROR_MAX_LENGTH = 120;
 
 /**
+ * `credentialLogin()` DOM 폴링이 반환한 원시 신호 문자열을 {@link LoginFailureReason}
+ * 로 분류한다(D-13). 이 함수가 DOM 신호 문자열 ↔ 실패 사유 어휘를 잇는 유일한 지점이다.
+ *
+ * - `'captcha'` → 캡차 위젯 감지. 과거 `'otp'`로 오분류되던 신호(D-13)를 여기서
+ *   바로잡는다 — 절대 재도입하지 말 것.
+ * - `'otp-form'` → 인증코드 입력창 감지. 이론상 도달 불가능에 가깝지만 셀렉터 유지
+ *   차원에서 별도 신호로 남겨두고, 안내는 미매핑 폴백으로 라우팅한다(D-14).
+ * - `'error:<본문>'` → Weverse 폼이 표시한 오류 텍스트. 본문이 비어 있으면(공백만
+ *   있어도) 폼 오류로 취급하지 않고 미매핑 폴백으로 떨어뜨린다.
+ * - `null` 또는 그 밖의 인식되지 않은 문자열 → 셀렉터 실패/미지 신호. 조용히 삼키지
+ *   않고 미매핑 폴백 + 원문 보존(가능한 경우)으로 처리한다.
+ */
+export function classifyCredentialLoginSignal(
+  raw: string | null
+): { reason: LoginFailureReason; detail?: string } {
+  if (raw === null) {
+    return { reason: "unknown" };
+  }
+
+  if (raw === "captcha") {
+    return { reason: "captcha" };
+  }
+
+  if (raw === "timeout") {
+    return { reason: "timeout" };
+  }
+
+  if (raw.startsWith("error:")) {
+    const body = raw.slice("error:".length).trim();
+    if (body.length === 0) {
+      return { reason: "unknown" };
+    }
+    return { reason: "form-error", detail: body };
+  }
+
+  // 'otp-form'을 포함해 인식되지 않는 모든 신호는 미매핑 폴백으로 라우팅하되
+  // 원문을 detail 로 보존한다 — 조용히 삼키지 않는다(D-14).
+  return { reason: "unknown", detail: raw };
+}
+
+/**
  * Weverse 폼이 표시한 오류 텍스트를 화면 표시용으로 전처리한다: trim 후 상한 초과 시
  * 말줄임표 한 글자를 붙여 자른다. 빈 문자열/공백만 있는 입력은 빈 문자열을 반환한다
  * (호출부가 폴백 문장을 쓰도록).

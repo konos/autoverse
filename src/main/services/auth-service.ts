@@ -2,9 +2,13 @@ import { EventEmitter } from "events";
 import { BrowserWindow, session, safeStorage, app } from "electron";
 import * as fs from "fs";
 import * as path from "path";
-import { maskToken } from "../../shared/mask";
+import { maskToken, maskSensitive } from "../../shared/mask";
 import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/types";
-import { mapLoginFailure } from "../../shared/login-failure";
+import {
+  mapLoginFailure,
+  classifyCredentialLoginSignal,
+  type LoginFailureReason,
+} from "../../shared/login-failure";
 import { logService } from "./log-service";
 import { ApiAuthClient, ApiAuthError } from "./api-auth-client";
 import {
@@ -357,10 +361,14 @@ export class AuthService extends EventEmitter {
             // Check DOM state
             const domState = await win.webContents.executeJavaScript(`
               (function() {
-                const otpInput = document.querySelector('input[placeholder="인증코드 6자리"]');
-                if (otpInput) return 'otp';
+                // D-13: 캡차 위젯 감지는 별도 신호로 분리한다 — 과거에는 이 분기가
+                // 'otp'를 반환해 사용자가 오지 않을 이메일 코드를 기다리게 했다.
                 const recaptcha = document.querySelector('.AuthLoginCredentialWidgetUi_recapcha_wrapper__oMA4m');
-                if (recaptcha) return 'otp';
+                if (recaptcha) return 'captcha';
+                // 인증코드 입력창은 이론상 도달 불가에 가깝지만, 실제로 뜨는 경우
+                // 조용한 무응답이 되지 않도록 별도 신호로 유지한다(미매핑 폴백으로 라우팅).
+                const otpInput = document.querySelector('input[placeholder="인증코드 6자리"]');
+                if (otpInput) return 'otp-form';
                 // Check for error text inside text-field error wrappers (specific to Weverse login form)
                 const errWraps = document.querySelectorAll('.text-field_error_wrap__9nRXJ .text-field_error_text__BwsFg, [class*="error_message"]');
                 for (const el of errWraps) {
@@ -396,25 +404,40 @@ export class AuthService extends EventEmitter {
       if (result === "token") {
         logService.info("AuthService", "credentialLogin(headless): token obtained directly");
         this.saveCredentials(email, password);
-        void this.runAccountTokenLadderSpike("credentialLogin").catch((err) => {
-          logService.error(
-            "AuthService",
-            `runAccountTokenLadderSpike(credentialLogin) failed: ${String(err)}`,
-          );
-        });
+        // D-12 사다리 실패 행: 로그인은 성공했지만 서비스 토큰 확보에 실패하면
+        // 사용자에게도 그 사실이 도달해야 한다 — 로그에만 남기고 끝내지 않는다.
+        void this.runAccountTokenLadderSpike("credentialLogin")
+          .then((spikeResult) => {
+            if (spikeResult.verdict === "fail") {
+              const failureResult = this.buildFailureResult(null, "token-ladder-failed", spikeResult.reason);
+              this._emit({
+                type: "login-failed",
+                message:
+                  failureResult.identifier !== undefined
+                    ? `${failureResult.message} (식별자: ${failureResult.identifier})`
+                    : (failureResult.message ?? "로그인 실패"),
+                timestamp: Date.now(),
+              });
+            }
+          })
+          .catch((err) => {
+            const rawDetail = err instanceof Error ? err.message : String(err);
+            logService.error(
+              "AuthService",
+              `runAccountTokenLadderSpike(credentialLogin) failed: ${rawDetail}`,
+            );
+            const failureResult = this.buildFailureResult(null, "token-ladder-failed", rawDetail);
+            this._emit({
+              type: "login-failed",
+              message:
+                failureResult.identifier !== undefined
+                  ? `${failureResult.message} (식별자: ${failureResult.identifier})`
+                  : (failureResult.message ?? "로그인 실패"),
+              timestamp: Date.now(),
+            });
+          });
         this.cleanupHeadless();
         return { success: true };
-      }
-
-      if (result === "otp") {
-        // DOM 폴링이 OTP 입력창 또는 캡차 위젯을 감지한 상태다. 반증된 "이메일 OTP
-        // 인증이 필요합니다" 문구(D-13, HAR 호출 0건)를 이 단계에서 재작성해 남기지
-        // 않는다 — 06-02 의 매핑 함수 결과만 사용한다. 캡차/OTP 신호를 별도 사유로
-        // 분리하는 진짜 수정은 06-05 소관이라 여기서는 "unknown"으로 최소 변경한다.
-        const guidance = mapLoginFailure("unknown", "otp-or-captcha-dom-signal");
-        logService.info("AuthService", "credentialLogin(headless): OTP/캡차 신호 감지 (분류는 06-05 소관)");
-        this._emit({ type: "login-failed", message: guidance.message, timestamp: Date.now() });
-        return { success: false, message: guidance.message, reason: "unknown" };
       }
 
       if (result === "timeout") {
@@ -431,30 +454,72 @@ export class AuthService extends EventEmitter {
           })();
         `).catch(() => ({}));
         logService.error("AuthService", `credentialLogin(headless): timeout, debug=${JSON.stringify(debugInfo)}`);
-
-        const msg = "로그인 응답 대기 시간 초과";
-        this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
-        this.cleanupHeadless();
-        return { success: false, message: msg };
       }
 
-      if (result.startsWith("error:")) {
-        const msg = result.slice(6);
-        logService.error("AuthService", `credentialLogin(headless): form error: ${msg}`);
-        this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
-        this.cleanupHeadless();
-        return { success: false, message: msg };
-      }
-
+      // D-13: 캡차/OTP폼/폼오류/타임아웃/미지 신호 전부를 classifyCredentialLoginSignal()
+      // 하나를 거쳐 사유로 분류한다. 캡차 위젯 감지가 더 이상 "OTP 필요"로 오분류되지
+      // 않는다 — 캡차 신호에는 이메일 코드 서사를 절대 붙이지 않는다.
+      const failureResult = this.buildFailureResult(result);
+      logService.info(
+        "AuthService",
+        `credentialLogin(headless): classified reason=${failureResult.reason} raw=${result}`,
+      );
+      this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
       this.cleanupHeadless();
-      return { success: false, message: "알 수 없는 상태" };
+      return failureResult;
     } catch (err) {
-      const msg = `로그인 오류: ${err instanceof Error ? err.message : String(err)}`;
-      logService.error("AuthService", msg);
-      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      const rawDetail = err instanceof Error ? err.message : String(err);
+      const failureResult = this.buildFailureResult(null, "network-error", rawDetail);
+      logService.error("AuthService", `credentialLogin(headless) exception: ${rawDetail}`);
+      this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
       this.cleanupHeadless();
-      return { success: false, message: msg };
+      return failureResult;
     }
+  }
+
+  /**
+   * DOM 폴링 원시 신호(또는 명시적 사유/디테일)를 마스킹을 통과한
+   * {@link CredentialLoginResult} 로 변환하는 단일 관문(R010, T-06-06).
+   *
+   * `mapLoginFailure()`가 돌려주는 `message`/`identifier`는 렌더러로 직접 반환되는
+   * 값이라 로그 자동 마스킹 경로를 타지 않는다 — 그래서 이 메서드가 반환 직전에
+   * `maskSensitive()`를 명시적으로 적용하는 유일한 지점이다. `logDetail`은 마스킹하지
+   * 않고 그대로 `logService`에 넘긴다(그쪽은 자동 마스킹이 적용된다).
+   *
+   * @param rawSignal DOM 폴링 결과 문자열(또는 이 경로를 타지 않는 호출부는 `null`)
+   * @param overrideReason `rawSignal` 분류를 건너뛰고 사유를 직접 지정할 때 사용
+   *   (예외/사다리 실패처럼 DOM 신호가 아닌 경로)
+   * @param overrideDetail `overrideReason`과 함께 쓰는 디테일 원문
+   */
+  private buildFailureResult(
+    rawSignal: string | null,
+    overrideReason?: LoginFailureReason,
+    overrideDetail?: string,
+  ): CredentialLoginResult {
+    const { reason, detail } =
+      overrideReason !== undefined
+        ? { reason: overrideReason, detail: overrideDetail }
+        : classifyCredentialLoginSignal(rawSignal);
+
+    const guidance = mapLoginFailure(reason, detail);
+
+    // 잘리지 않은 원문은 logService 로 보낸다 — 그쪽 자동 마스킹이 적용되므로
+    // 여기서 다시 마스킹하지 않는다.
+    if (guidance.logDetail) {
+      logService.info("AuthService", `credentialLogin(headless): form error detail=${guidance.logDetail}`);
+    }
+
+    // R010 마스킹 관문 — message/identifier 는 렌더러로 직접 반환되는 값이라
+    // 로그 자동 마스킹 경로를 타지 않는다. 여기가 그 유일한 관문이다(T-06-06).
+    const result: CredentialLoginResult = {
+      success: false,
+      reason,
+      message: maskSensitive(guidance.message),
+    };
+    if (guidance.identifier !== undefined) {
+      result.identifier = maskSensitive(guidance.identifier);
+    }
+    return result;
   }
 
   private async extractTokenFromCookies(): Promise<boolean> {
