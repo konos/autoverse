@@ -90,7 +90,7 @@
      폼 오류 / 타임아웃 / 네트워크·런타임 오류 / 토큰 사다리 실패 / 미매핑)를 사용자가 이해할 수
      있는 한국어 설명 문구로 표시한다.
 
-**Plans**: 9/10 plans executed (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계) + 3 gap closure plans (06-08 ~ 06-10, 2026-08-26 계획 — 06-VERIFICATION.md gaps_found 대응)
+**Plans**: 10/10 plans executed (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계) + 3 gap closure plans (06-08 ~ 06-10, 2026-08-26 계획 — 06-VERIFICATION.md gaps_found 대응)
 **UI hint**: yes
 
 **Wave 1** *(병렬 3개 — 파일 겹침 없음)*
@@ -124,7 +124,7 @@
 
 **Wave 2** *(06-09 완료 후 — `auth-service.ts` 파일 겹침)*
 
-- [ ] 06-10-PLAN.md — [wave 2] gap 2 와 뿌리를 공유하는 잔여 마스킹 관문 우회 폐쇄 — 문맥 무관 JWT 규칙(WR-02) · 버튼 비활성 실패의 관문 통과(WR-03) · 디버그 덤프 이메일 원문 제거(IN-02)
+- [x] 06-10-PLAN.md — [wave 2] gap 2 와 뿌리를 공유하는 잔여 마스킹 관문 우회 폐쇄 — 문맥 무관 JWT 규칙(WR-02) · 버튼 비활성 실패의 관문 통과(WR-03) · 디버그 덤프 이메일 원문 제거(IN-02)
 
 > **미룬 리뷰 항목 (근거는 각 PLAN 의 `<review_disposition>`):** WR-04(설정 IPC 런타임 검증)와
 > IN-01(설정 읽기 오류 로그 문구)은 Phase 07 로, IN-04(모달 `max-height`)는 `06-VALIDATION.md`
@@ -155,5 +155,5 @@ Phases execute in numeric order: 05 → 06 → 07
 | 03. s03 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 04. s04 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 05. API 로그인 핵심 흐름 + 토큰 교환 검증 | v0.3.0 | 3/3 | Complete    | 2026-08-25 |
-| 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 9/10 | In Progress|  |
+| 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 10/10 | In Progress|  |
 | 07. API 자격 증명 저장 + 토큰 만료 사전 경고 | v0.3.0 | 0/TBD | Not started | - |

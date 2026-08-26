@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: executing
-stopped_at: Completed 06-09-PLAN.md
-last_updated: "2026-08-26T07:47:30.046Z"
+stopped_at: Completed 06-10-PLAN.md
+last_updated: "2026-08-26T07:58:21.703Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: 9103226c4732867c1480fff8a92d062cd3776dee
+state_head: 3ea8292b9c32713d46e05cf3cbb9060e220276c6
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 ## Current Position
 
 Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
-Plan: 3 of 10
+Plan: 4 of 10
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 06 execution started
 
@@ -84,6 +84,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06 P07 | 12min | 2 tasks | 1 files |
 | Phase 06-ui P08 | 15min | 3 tasks | 6 files |
 | Phase 06-ui P09 | 7min | 3 tasks | 5 files |
+| Phase 06 P10 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,9 @@ Recent decisions affecting current work:
 - [Phase 06-ui]: [Phase 06 P08] WR-01(저장 중 Esc 경합)을 gap 1과 같은 플랜에서 함께 해소 — decideNoticeCancel(saving) 순수 함수로 Cancel 버튼과 네이티브 Esc를 단일 판단 지점에 통합. IN-03은 onDiagnostic JSDoc 문서화로만, IN-04는 06-VALIDATION.md Manual-Only #2 UAT로 이관(DEFER)
 - [Phase 06]: [Phase 06-ui] [06-09] CR-02 gap closure: validateToken() 4개 실패 emit을 describeTokenValidationFailure() + emitTokenValidationFailure() 단일 관문으로 재배선 — 서버 텍스트를 담을 수 없는 타입(context: {status?:number})으로 구조적 봉인, maskSensitive() 감싸기(A안)는 SENSITIVE_PATTERNS가 key=value 문맥에만 의존해 보장하지 못하므로 기각
 - [Phase 06]: [Phase 06-ui] [06-09] 06-05-SUMMARY.md의 반증된 완료 선언(공유 경로가 '자동으로 혜택을 받는다')을 D-11 관례로 정정 — 원문 보존 + [VOID] + 정정문, phase 06 이전(커밋 816970a)부터 있던 코드임을 명시
+- [Phase 06]: 06-10: SENSITIVE_PATTERNS에 문맥 무관 JWT 형태 2차 방어선 규칙 추가 — 06-REVIEW WR-02 Fix 제안(각 분절 10자 이상)을 채택하고 실제 계정 API 도메인/진단 로그로 역산 검증
+- [Phase 06]: 06-10: buildFailureResult()에 overrideMessage 4번째 선택 파라미터 추가 — btnEnabled 실패(WR-03)가 확정 문구를 유지한 채 마스킹 관문을 지나도록 재배선, 기존 5개 호출부는 후방 호환으로 무변경
+- [Phase 06]: 06-10: 헤드리스 디버그 덤프의 emailValue(이메일 원문)를 emailLen(길이)으로 교체(IN-02) — 06-REVIEW.md WR-02/WR-03/IN-02 전부 해소, phase 06의 10개 리뷰 발견 전부 처리 완료
 
 ### Pending Todos
 
@@ -140,6 +144,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T07:47:29.981Z
-Stopped at: Completed 06-09-PLAN.md
+Last session: 2026-08-26T07:58:21.635Z
+Stopped at: Completed 06-10-PLAN.md
 Resume file: None
