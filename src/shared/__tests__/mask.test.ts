@@ -315,6 +315,68 @@ describe("maskSensitive", () => {
   });
 });
 
+// ── maskSensitive: 문맥 무관 JWT 형태 규칙 (06-REVIEW WR-02, 06-10-PLAN Task 1) ──
+//
+// 위 SENSITIVE_PATTERNS 규칙 13개는 전부 `key: value`/`key=value` 문맥에 의존한다.
+// 서버가 임의 문장 안에 토큰 형태 문자열을 섞어 돌려주면(키 이름 접두사 없이) 그
+// 규칙들은 전부 통과시킨다. 이 describe 는 그 구조적 한계를 메우는 마지막 규칙
+// (배열 맨 끝, 키 문맥 불필요, JWT 구조 자체를 매칭)을 검증한다.
+//
+// 양성(Test 1~3)과 음성/훼손 방지(Test 4~7)를 같은 비중으로 둔다 — 이 규칙의
+// 진짜 리스크는 "못 잡는 것"이 아니라 "정상 진단 텍스트를 훼손하는 것"이다.
+describe("maskSensitive — 문맥 무관 JWT 형태 규칙 (WR-02)", () => {
+  // jwt.io 예제와 동일한 구조 — 3분절 전부 10자 이상(실제 JWT 크기에 가깝다).
+  // mask.test.ts 상단의 makeJwt() 헬퍼는 isTokenExpired() 파싱 테스트 전용이라
+  // 서명 분절이 "fakesig"(7자)로 짧다 — 여기서는 재사용하지 않는다.
+  const CONTEXT_FREE_JWT_1 =
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+  const CONTEXT_FREE_JWT_2 =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5ODc2NTQzMjEwIn0.4Adcj3UFYzPUVaVF43FmMab6RlaQD8A9V8wFzzht-KQ";
+
+  it("Test 1: 키 이름 접두사 없이 문장 한가운데 놓인 JWT 형태 문자열이 마스킹된다", () => {
+    const text = `서버 응답: 이미 사용된 토큰입니다: ${CONTEXT_FREE_JWT_1} 다시 로그인해주세요`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(CONTEXT_FREE_JWT_1);
+  });
+
+  it("Test 2: 같은 문장에 JWT 형태 문자열이 두 개면 전역 치환으로 둘 다 마스킹된다", () => {
+    const text = `첫 토큰: ${CONTEXT_FREE_JWT_1} 두번째 토큰: ${CONTEXT_FREE_JWT_2}`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(CONTEXT_FREE_JWT_1);
+    expect(result).not.toContain(CONTEXT_FREE_JWT_2);
+  });
+
+  it("Test 3: 기존 accessToken= 형태는 지금과 동일하게 마스킹된다 (이중 훼손 없음)", () => {
+    const long = "b".repeat(60);
+    const text = `{"accessToken":"${long}"}`;
+    const result = maskSensitive(text);
+    expect(result).not.toContain(long);
+    expect(result).toContain('"accessToken":');
+  });
+
+  it("Test 4 (훼손 방지): 계정 API 호스트 도메인은 한 글자도 바뀌지 않는다", () => {
+    const text = "요청 실패: https://accountapi.weverse.io/web/api/user/api/login";
+    expect(maskSensitive(text)).toBe(text);
+  });
+
+  it("Test 5 (훼손 방지): 점이 포함된 파일 경로/모듈 경로는 한 글자도 바뀌지 않는다", () => {
+    const text =
+      "src/main/services/auth-service.ts 를 참고, node_modules/@electron-forge/core/dist/api.js 도 함께 확인";
+    expect(maskSensitive(text)).toBe(text);
+  });
+
+  it("Test 6 (훼손 방지): 시맨틱 버전 문자열은 한 글자도 바뀌지 않는다", () => {
+    const text = "electron@37.2.0, better-sqlite3@11.8.1, node 20.11.0 에서 확인됨";
+    expect(maskSensitive(text)).toBe(text);
+  });
+
+  it("Test 7 (훼손 방지): 이 저장소의 실제 진단 로그 문장(토큰 shape)은 한 글자도 바뀌지 않는다", () => {
+    // auth-service.ts validateToken() 의 실제 진단 라인 형태
+    const text = "validateToken: token shape — parts=3 prefix=eyJhbGciOiJIUzI1NiJ9... len=245";
+    expect(maskSensitive(text)).toBe(text);
+  });
+});
+
 // ── isTokenExpired (JWT exp parsing) ─────────────────────────────────────────
 
 describe("isTokenExpired", () => {
