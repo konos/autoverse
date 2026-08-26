@@ -42,6 +42,7 @@ vi.mock("electron", () => ({
 import { BrowserWindow } from "electron";
 import { AuthService } from "../auth-service";
 import { ApiAuthClient } from "../api-auth-client";
+import { logService } from "../log-service";
 import type { LoginFailureReason } from "../../../shared/login-failure";
 import type { AuthEvent, CredentialLoginResult } from "../../../shared/types";
 
@@ -644,5 +645,141 @@ describe("AuthService.buildLadderFailureEvent — 사다리 실패가 사용자�
 
     expect(event.message).toContain("(식별자:");
     expect(event.message).not.toContain(tokenLike);
+  });
+});
+
+// ── validateToken() 실패 emit 관문 (Task 2, 06-VERIFICATION.md gap 2 / CR-02) ──
+//
+// 두 로그인 모드가 공유하는 validateToken() 의 네 실패 지점이 서버 응답 원문을 더 이상
+// 렌더러로 직접 흘려보내지 않는지 회귀로 잠근다. 픽스처는 키 이름 접두사 없이 놓인 토큰
+// 형태 문자열이다 — maskSensitive() 의 key=value 규칙(WR-02)이 잡지 못하는 바로 그 형태를
+// 골라, "감싸기(A안)로는 보장되지 않는다"는 이 플랜의 판단을 증명한다.
+
+interface TextStubResponse {
+  status: number;
+  statusText?: string;
+  text: string;
+}
+
+/** `makeFetchQueue`(위)와 달리 `text()`/`statusText` 를 제공한다 — validateToken() 은
+ * `res.json()` 이 아니라 `res.text()` 로 응답 본문을 읽는다. 기존 `makeFetchQueue` 는
+ * 다른 describe(runAccountTokenLadderSpike)가 쓰고 있으므로 수정하지 않고 나란히 둔다. */
+function makeTextFetchQueue(responses: TextStubResponse[]): typeof globalThis.fetch {
+  let i = 0;
+  return vi.fn(async () => {
+    const r = responses[Math.min(i, responses.length - 1)];
+    i++;
+    return {
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      statusText: r.statusText ?? "",
+      text: async () => r.text,
+    } as unknown as Response;
+  });
+}
+
+interface PrivateCachedToken {
+  cachedToken: string | null;
+}
+
+/** `cachedToken` 은 private 이므로 이 파일이 이미 쓰는 캐스팅 관용구로 주입한다.
+ * JWT 로 파싱되지 않는 긴 문자열이면 `isTokenExpired()` 가 파싱 실패 시 false 를
+ * 돌려줘 로컬 만료 분기를 건너뛰고 네트워크 분기까지 진행한다. */
+function injectCachedToken(service: AuthService, token: string): void {
+  (service as unknown as PrivateCachedToken).cachedToken = token;
+}
+
+// 키 이름 접두사 없이 놓인 150자 이상의 토큰 형태 문자열 — maskSensitive() 의
+// key=value 규칙이 잡지 못하는 문맥 없는 원문 픽스처.
+const CONTEXT_FREE_TOKEN_LIKE = "z".repeat(180);
+
+describe("AuthService.validateToken — 실패 emit 관문 (Task 2, CR-02/06-VERIFICATION gap 2)", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+    cookieFixtureBox.current = [];
+  });
+
+  it("!res.ok(503): emit 된 auth-event 의 message 에 원문 토큰 형태 문자열이 포함되지 않고, 이벤트 타입은 login-failed 다", async () => {
+    const service = new AuthService();
+    injectCachedToken(service, LONG_TOKEN);
+    globalThis.fetch = makeTextFetchQueue([
+      { status: 503, statusText: "Service Unavailable", text: `server error ${CONTEXT_FREE_TOKEN_LIKE}` },
+    ]);
+    const events: AuthEvent[] = [];
+    service.on("auth-event", (e: AuthEvent) => events.push(e));
+
+    await service.validateToken();
+
+    const failure = events.find((e) => e.type === "login-failed");
+    expect(failure).toBeDefined();
+    expect(failure!.message).not.toContain(CONTEXT_FREE_TOKEN_LIKE);
+  });
+
+  it("JSON 파싱 실패: emit 된 message 에 원문 토큰 형태 문자열이 포함되지 않고, 이벤트 타입은 login-failed 다", async () => {
+    const service = new AuthService();
+    injectCachedToken(service, LONG_TOKEN);
+    globalThis.fetch = makeTextFetchQueue([
+      { status: 200, text: `not json ${CONTEXT_FREE_TOKEN_LIKE}` },
+    ]);
+    const events: AuthEvent[] = [];
+    service.on("auth-event", (e: AuthEvent) => events.push(e));
+
+    await service.validateToken();
+
+    const failure = events.find((e) => e.type === "login-failed");
+    expect(failure).toBeDefined();
+    expect(failure!.message).not.toContain(CONTEXT_FREE_TOKEN_LIKE);
+  });
+
+  it("fanId 없음: emit 된 message 에 원문 토큰 형태 문자열이 포함되지 않고, 이벤트 타입은 login-failed 다", async () => {
+    const service = new AuthService();
+    injectCachedToken(service, LONG_TOKEN);
+    globalThis.fetch = makeTextFetchQueue([
+      { status: 200, text: JSON.stringify({ note: CONTEXT_FREE_TOKEN_LIKE }) },
+    ]);
+    const events: AuthEvent[] = [];
+    service.on("auth-event", (e: AuthEvent) => events.push(e));
+
+    await service.validateToken();
+
+    const failure = events.find((e) => e.type === "login-failed");
+    expect(failure).toBeDefined();
+    expect(failure!.message).not.toContain(CONTEXT_FREE_TOKEN_LIKE);
+  });
+
+  it("401 + 세션 복원 실패: emit 된 message 에 원문 토큰 형태 문자열이 포함되지 않고, 이벤트 타입은 token-expired 다", async () => {
+    const service = new AuthService();
+    injectCachedToken(service, LONG_TOKEN);
+    cookieFixtureBox.current = []; // 세션 복원(trySessionRestore)이 실패하도록 빈 쿠키
+    globalThis.fetch = makeTextFetchQueue([
+      { status: 401, statusText: "Unauthorized", text: `unauthorized ${CONTEXT_FREE_TOKEN_LIKE}` },
+    ]);
+    const events: AuthEvent[] = [];
+    service.on("auth-event", (e: AuthEvent) => events.push(e));
+
+    await service.validateToken();
+
+    const failure = events.find((e) => e.type === "token-expired");
+    expect(failure).toBeDefined();
+    expect(failure!.message).not.toContain(CONTEXT_FREE_TOKEN_LIKE);
+  });
+
+  it("진단 보존: 실패 경로에서도 logService 쪽 진단 경로에는 응답 본문이 여전히 남는다 — 사용자 노출을 줄이는 것이지 관측성을 줄이는 것이 아니다", async () => {
+    const service = new AuthService();
+    injectCachedToken(service, LONG_TOKEN);
+    globalThis.fetch = makeTextFetchQueue([
+      { status: 503, statusText: "Service Unavailable", text: `server error ${CONTEXT_FREE_TOKEN_LIKE}` },
+    ]);
+    const infoSpy = vi.spyOn(logService, "info");
+
+    await service.validateToken();
+
+    const diagnosticCall = infoSpy.mock.calls.find(
+      (call) => typeof call[1] === "string" && call[1].includes(CONTEXT_FREE_TOKEN_LIKE),
+    );
+    expect(diagnosticCall).toBeDefined();
   });
 });
