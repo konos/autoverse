@@ -3,6 +3,8 @@
  * The method is pure logic: base64url decode → JSON parse → compare exp to Date.now().
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
 
 // ── Mutable cookie fixture, wired through the mocked `session.fromPartition` ──
 // `vi.hoisted()` is required because `vi.mock()` factories are hoisted above
@@ -55,6 +57,24 @@ function makeJwt(payload: object): string {
   const header = base64urlEncode({ alg: "HS256", typ: "JWT" });
   const body = base64urlEncode(payload);
   return `${header}.${body}.fakesig`;
+}
+
+// `app.getPath` is mocked to "/tmp/test-userData" above — mirrors
+// getCredentialsPath() in auth-service.ts (userData + "credentials.enc").
+const TEST_CREDENTIALS_PATH = path.join("/tmp/test-userData", "credentials.enc");
+
+/** Writes a real (mock-encrypted) credentials file so hasStoredCredentials() is genuinely true. */
+function writeStoredCredentials(email: string, password: string): void {
+  fs.mkdirSync("/tmp/test-userData", { recursive: true });
+  fs.writeFileSync(TEST_CREDENTIALS_PATH, Buffer.from(JSON.stringify({ email, password })));
+}
+
+function clearStoredCredentialsFile(): void {
+  try {
+    fs.unlinkSync(TEST_CREDENTIALS_PATH);
+  } catch {
+    /* not present — ok */
+  }
 }
 
 // ── isTokenExpired ─────────────────────────────────────────────────────────────
@@ -178,10 +198,6 @@ describe("AuthService.getStatus", () => {
 // 저장된 자격증명으로의 무인 로그인은 두 모드 모두에서 차단되고, 살아있는
 // 쿠키 토큰으로의 세션 복원은 두 모드 모두에서 허용됨을 검증한다.
 
-interface PrivateCredentialsAccess {
-  loadCredentials(): { email: string; password: string } | null;
-}
-
 describe("AuthService.tryAutoLogin — 무인 로그인 차단 (두 모드 공통)", () => {
   const ENV_KEY = "AUTOVERSE_LOGIN_MODE";
   let originalEnv: string | undefined;
@@ -189,6 +205,7 @@ describe("AuthService.tryAutoLogin — 무인 로그인 차단 (두 모드 공�
   beforeEach(() => {
     originalEnv = process.env[ENV_KEY];
     cookieFixtureBox.current = [];
+    clearStoredCredentialsFile();
   });
 
   afterEach(() => {
@@ -196,15 +213,13 @@ describe("AuthService.tryAutoLogin — 무인 로그인 차단 (두 모드 공�
     else process.env[ENV_KEY] = originalEnv;
     vi.restoreAllMocks();
     cookieFixtureBox.current = [];
+    clearStoredCredentialsFile();
   });
 
   it("API 모드 + 저장된 자격증명 있음 → credentialLogin(헤드리스) 을 호출하지 않고 false 를 반환한다", async () => {
     process.env[ENV_KEY] = "api";
+    writeStoredCredentials("stored@example.com", "stored-pw");
     const service = new AuthService();
-    vi.spyOn(
-      service as unknown as PrivateCredentialsAccess,
-      "loadCredentials",
-    ).mockReturnValue({ email: "stored@example.com", password: "stored-pw" });
     const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
 
     const result = await service.tryAutoLogin();
@@ -215,11 +230,8 @@ describe("AuthService.tryAutoLogin — 무인 로그인 차단 (두 모드 공�
 
   it("브라우저 모드 + 저장된 자격증명 있음 → credentialLogin(헤드리스) 을 호출하지 않는다 (D-03 핵심 회귀 — 이전에는 호출했다)", async () => {
     delete process.env[ENV_KEY];
+    writeStoredCredentials("stored@example.com", "stored-pw");
     const service = new AuthService();
-    vi.spyOn(
-      service as unknown as PrivateCredentialsAccess,
-      "loadCredentials",
-    ).mockReturnValue({ email: "stored@example.com", password: "stored-pw" });
     const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
 
     const result = await service.tryAutoLogin();
@@ -266,19 +278,18 @@ describe("AuthService.trySessionRestore — 무인 로그인 없이 세션 복�
 
   beforeEach(() => {
     cookieFixtureBox.current = [];
+    clearStoredCredentialsFile();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     cookieFixtureBox.current = [];
+    clearStoredCredentialsFile();
   });
 
   it("저장된 자격증명이 있어도 credentialLogin(헤드리스) 을 호출하지 않는다", async () => {
+    writeStoredCredentials("stored@example.com", "stored-pw");
     const service = new AuthService();
-    vi.spyOn(
-      service as unknown as PrivateCredentialsAccess,
-      "loadCredentials",
-    ).mockReturnValue({ email: "stored@example.com", password: "stored-pw" });
     const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
 
     const result = await (service as unknown as PrivateSessionRestore).trySessionRestore();

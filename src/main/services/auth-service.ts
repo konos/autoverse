@@ -7,7 +7,6 @@ import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/
 import { mapLoginFailure } from "../../shared/login-failure";
 import { logService } from "./log-service";
 import { ApiAuthClient, ApiAuthError } from "./api-auth-client";
-import { resolveLoginMode } from "../login-mode";
 import {
   pickAccountTokenCookie,
   summarizeCookies,
@@ -101,21 +100,6 @@ export class AuthService extends EventEmitter {
     logService.info("AuthService", `credentials saved for ${email.slice(0, 3)}***`);
   }
 
-  private loadCredentials(): StoredCredentials | null {
-    const filePath = getCredentialsPath();
-    if (!fs.existsSync(filePath)) return null;
-    if (!safeStorage.isEncryptionAvailable()) return null;
-    try {
-      const buffer = fs.readFileSync(filePath);
-      const json = safeStorage.decryptString(buffer);
-      return JSON.parse(json) as StoredCredentials;
-    } catch (err) {
-      logService.error("AuthService", `credentials 로드 실패: ${String(err)}`);
-      this.clearCredentials();
-      return null;
-    }
-  }
-
   clearCredentials(): void {
     const filePath = getCredentialsPath();
     if (fs.existsSync(filePath)) {
@@ -157,72 +141,56 @@ export class AuthService extends EventEmitter {
   // ── Auto-login on app start ─────────────────────────────────────────────
 
   async tryAutoLogin(): Promise<boolean> {
-    // API 모드는 매 로그인마다 OTP 를 강제하므로 저장된 자격증명으로 조용히
-    // 자동 로그인할 방법이 없다 (PROJECT.md 락인 제약). 헤드리스 credentialLogin()
-    // 을 호출하지 않는 것은 물론, persist:weverse 쿠키 파티션(브라우저 모드의
-    // 상태)도 조회하지 않는다 — 다른 모드/다른 계정의 잔여 세션을 API 모드
-    // 시작 시 조용히 재사용하는 것을 방지한다 (Pitfall 4 의 정신을 읽기 경로에도
-    // 적용). main.ts 앱 시작 경로와 ipc-handlers.ts 의 `auth:auto-login` 핸들러가
-    // 모두 이 메서드 하나로 수렴하므로, 여기 한 곳의 게이트로 두 진입점이 함께
-    // 막힌다.
-    if (resolveLoginMode() === "api") {
-      logService.info(
-        "AuthService",
-        "tryAutoLogin: API 모드는 저장된 자격증명으로 자동 로그인 불가 — 매 로그인마다 OTP 필요 (사용자 개입 대기)",
-      );
-      return false;
-    }
-
-    // First check if existing token in cookies is still valid
+    // 무인 로그인 차단 (D-03) — 가드 조건을 *모드*에서 *"외부에 로그인 요청을
+    // 발생시키는가"*로 재정의했다. 두 모드 모두에서 저장된 자격증명으로의
+    // credentialLogin() 무인 호출은 하지 않는다. 근거는 둘이다: ① 이 가드의
+    // 예전 사유("API 모드는 매 로그인마다 OTP 강제")는 05-01의 HAR 실측
+    // (실제 로그인 흐름에 OTP 호출 0건)으로 반증됐다. ② 그럼에도 이 가드
+    // 자체는 실증된 가치가 있다 — 05-01에서 이 가드(당시 API 모드 한정)가
+    // tryAutoLogin() 에는 누락돼 있어 저장된 다른 계정으로 헤드리스 로그인이
+    // 시도됐고, 실제로 그 계정에 알림 메일이 발송됐다. 사유는 정정하되
+    // 보호는 약화가 아니라 두 모드로 확대해서 유지한다. main.ts 앱 시작
+    // 경로와 ipc-handlers.ts 의 `auth:auto-login` 핸들러가 모두 이 메서드
+    // 하나로 수렴하므로, 여기 한 곳의 게이트로 두 진입점이 함께 막힌다.
+    //
+    // 살아있는 쿠키 토큰으로의 세션 복원은 외부 요청을 발생시키지 않으므로
+    // 계속 허용한다 — 재시작 후 바로 사용할 수 있는 경험을 지킨다.
     const tokenFound = await this.extractTokenFromCookies();
     if (tokenFound) {
-      logService.info("AuthService", "tryAutoLogin: existing cookie token found");
+      logService.info("AuthService", "tryAutoLogin: existing cookie token found — session restored");
       return true;
     }
 
-    const creds = this.loadCredentials();
-    if (!creds) {
-      logService.info("AuthService", "tryAutoLogin: no stored credentials");
-      return false;
-    }
-
-    logService.info("AuthService", `tryAutoLogin: attempting login for ${creds.email.slice(0, 3)}***`);
-    this._emit({ type: "credential-login-progress", message: "자동 로그인 시도 중...", timestamp: Date.now() });
-
-    const result = await this.credentialLogin(creds.email, creds.password);
-    if (result.success) {
-      logService.info("AuthService", "tryAutoLogin: success");
-      return true;
-    }
-
-    logService.warn("AuthService", `tryAutoLogin: failed — ${result.message}`);
+    logService.info(
+      "AuthService",
+      "tryAutoLogin: no valid session cookie — 저장된 자격증명이 있어도 무인 로그인은 시도하지 않는다. 사용자가 직접 로그인해야 합니다",
+    );
     return false;
   }
 
-  // ── Auto re-login on token expiry ───────────────────────────────────────
+  // ── Session restore on token expiry ─────────────────────────────────────
 
-  private async tryAutoRelogin(): Promise<boolean> {
-    if (resolveLoginMode() === "api") {
-      logService.info("AuthService", "tryAutoRelogin: API 모드는 자동 재로그인 불가 — 재로그인 안내로 대체");
-      return false;
-    }
-
+  /**
+   * 구 tryAutoRelogin() 의 정직한 후신 (D-03). 더 이상 어떤 형태의 로그인도
+   * 수행하지 않는다 — 쿠키에 남아있는 유효한 세션을 복원하는 것만 한다.
+   * 저장된 자격증명으로의 무인 credentialLogin() 호출은 tryAutoLogin() 과
+   * 같은 이유로 완전히 제거됐다(05-01 사고 재발 방지). 진행 중 중복 실행을
+   * 막던 플래그는 그대로 유지한다.
+   */
+  private async trySessionRestore(): Promise<boolean> {
     if (this.autoReloginInProgress) return false;
 
-    const creds = this.loadCredentials();
-    if (!creds) return false;
-
     this.autoReloginInProgress = true;
-    logService.info("AuthService", "tryAutoRelogin: token expired, attempting re-login");
-    this._emit({ type: "credential-login-progress", message: "토큰 만료 — 자동 재로그인 중...", timestamp: Date.now() });
-
     try {
-      const result = await this.credentialLogin(creds.email, creds.password);
-      if (result.success) {
-        logService.info("AuthService", "tryAutoRelogin: success");
+      const tokenFound = await this.extractTokenFromCookies();
+      if (tokenFound) {
+        logService.info("AuthService", "trySessionRestore: existing cookie token found — session restored");
         return true;
       }
-      logService.warn("AuthService", `tryAutoRelogin: failed — ${result.message}`);
+      logService.info(
+        "AuthService",
+        "trySessionRestore: no valid session cookie — 사용자가 직접 로그인해야 합니다",
+      );
       return false;
     } finally {
       this.autoReloginInProgress = false;
@@ -843,12 +811,12 @@ export class AuthService extends EventEmitter {
 
     const localExpired = this.isTokenExpired(this.cachedToken);
     if (localExpired) {
-      logService.warn("AuthService", "JWT exp is in the past — attempting auto re-login");
+      logService.warn("AuthService", "JWT exp is in the past — attempting session restore");
       this.cachedToken = null;
       this.cachedFanId = undefined;
 
-      const reloginOk = await this.tryAutoRelogin();
-      if (reloginOk) {
+      const restored = await this.trySessionRestore();
+      if (restored) {
         return this.getStatus();
       }
 
@@ -910,12 +878,12 @@ export class AuthService extends EventEmitter {
     logService.info("AuthService", `validateToken body: ${rawBody.slice(0, 500)}`);
 
     if (res.status === 401) {
-      logService.warn("AuthService", "validateToken: 401 — attempting auto re-login");
+      logService.warn("AuthService", "validateToken: 401 — attempting session restore");
       this.cachedToken = null;
       this.cachedFanId = undefined;
 
-      const reloginOk = await this.tryAutoRelogin();
-      if (reloginOk) {
+      const restored = await this.trySessionRestore();
+      if (restored) {
         return this.getStatus();
       }
 
