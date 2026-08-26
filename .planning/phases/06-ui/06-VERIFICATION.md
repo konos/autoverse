@@ -1,63 +1,53 @@
 ---
 phase: 06-ui
-verified: 2026-08-26T06:15:20Z
-status: gaps_found
-score: 5/7 truths verified
+verified: 2026-08-26T08:12:12Z
+status: human_needed
+score: 7/7 truths verified
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "사용자가 API 모드를 처음 선택하면 두 가지 고지를 확인해야만 진행할 수 있다 — 확인 저장이 실패하면 모달이 닫히지 않고 모드도 바뀌지 않는다 (ROADMAP SC2 정정본, 06-06-PLAN must_haves)"
-    status: partial
-    reason: >
-      정상 경로(쓰기 성공)에서는 "확인해야만 진행" 계약이 그대로 성립한다. 그러나
-      settings:set-login-mode IPC 쓰기가 실패하는 경로에서는 계약이 깨진다.
-      LoginPanel.tsx의 handleAcknowledge()는 onSetLoginMode()가 실패 시 예외를
-      던질 것을 전제로 try/catch를 구성했지만, App.tsx의 handleSetLoginMode()는
-      자신의 실패를 catch해 loginError 배너에만 표시하고 절대 다시 던지지 않는다
-      (App.tsx:130-139). 그 결과 디스크 쓰기 오류로 settings:set-login-mode가
-      실제로 실패해도 handleAcknowledge()의 await onSetLoginMode("api")는 정상
-      resolve되어 setNoticeOpen(false)가 실행되고, 모달은 "확인 완료"로 닫힌다.
-      loginMode 상태는 실제로 바뀌지 않았지만 apiModeNoticeAckedVersion은 이미
-      영속되어, 다음에 API 탭을 다시 눌러도 고지 모달이 재노출되지 않는다.
-    artifacts:
-      - path: "src/renderer/App.tsx"
-        issue: "handleSetLoginMode(130-139행)가 실패를 삼키고 절대 reject하지 않는다 — 탭 클릭 경로(fire-and-forget)에는 맞지만, 모달 확인 경로가 요구하는 '실패 시 reject' 계약과 충돌한다."
-      - path: "src/renderer/components/LoginPanel.tsx"
-        issue: "handleAcknowledge(95-107행)가 onSetLoginMode 실패 시 reject를 전제로 catch를 구성했지만, 실제로 주입되는 함수는 절대 reject하지 않는다."
-    missing:
-      - "모달 전용 strict 버전(예: setLoginModeOrThrow)을 추가해 handleAcknowledge에서만 사용하고, 기존 fire-and-forget용 handleSetLoginMode는 탭 클릭 경로에 그대로 남긴다."
-      - "App.tsx/LoginPanel.tsx에 대한 렌더러 컴포넌트 테스트가 전혀 없어(순수 함수 login-panel-view.ts만 테스트됨) 이 결함이 자동화로 잡히지 않는다 — 최소한 회귀 방지용 커버리지가 필요하다."
-  - truth: "렌더러로 돌아가는 실패 문구와 식별자는 마스킹을 통과한 값뿐이다 — 토큰·비밀번호·URL 쿼리스트링이 화면에 노출되지 않는다 (06-05-PLAN must_haves, R010)"
-    status: partial
-    reason: >
-      credentialLogin()의 실패 경로(buildFailureResult() 경유)는 maskSensitive()를
-      명시적으로 통과하며 올바르게 마스킹된다 — SC3가 요구하는 6가지 실패 신호
-      매핑은 정확하다. 그러나 두 모드가 공유하는 validateToken()의 네 개 emit
-      지점(401 세션 복원 실패, !res.ok, JSON 파싱 실패, fanId 없음)은
-      buildFailureResult()/mapLoginFailure()를 전혀 거치지 않고, 서버 응답 원문
-      rawBody 최대 200자를 마스킹 없이 그대로 _emit() → auth-event IPC →
-      App.tsx의 loginError로 흘려보낸다(auth-service.ts:955-988). 06-05-SUMMARY.md는
-      이 경로가 "이미 같은 mapLoginFailure()/emit 경로를 타 자동으로 혜택을
-      받는다"고 기록했으나 코드상 사실이 아니다.
-    artifacts:
-      - path: "src/main/services/auth-service.ts"
-        issue: "validateToken()의 네 개 _emit() 호출(955-960, 964-967, 974-978, 983-988행)이 maskSensitive()를 거치지 않은 rawBody.slice(0,200)을 message에 직접 담는다."
-    missing:
-      - "네 개 emit 지점에서 maskSensitive(rawBody.slice(0, 200))로 감싸거나, D-12 매핑 테이블처럼 상태 코드 기반 고정 안내 문구로 대체한다."
-      - "06-05-SUMMARY.md의 '자동으로 혜택을 받는다'는 서술을 이 사실에 맞게 정정한다 — 다음 phase가 이 잘못된 완료 선언을 근거로 재검증을 건너뛸 위험이 있다."
-deferred: []
+re_verification:
+  previous_status: gaps_found
+  previous_score: 5/7
+  gaps_closed:
+    - "사용자가 API 모드를 처음 선택하면 두 가지 고지를 확인해야만 진행할 수 있다 — 확인 저장이 실패하면 모달이 닫히지 않고 모드도 바뀌지 않는다 (ROADMAP SC2 정정본, 06-06-PLAN must_haves) — CR-01, 06-08 로 해소"
+    - "렌더러로 돌아가는 실패 문구와 식별자는 마스킹을 통과한 값뿐이다 — 토큰·비밀번호·URL 쿼리스트링이 화면에 노출되지 않는다 (06-05-PLAN must_haves, R010) — CR-02, 06-09/06-10 으로 해소"
+  gaps_remaining: []
+  regressions: []
+human_verification:
+  - test: "브라우저 모드 선택 → 앱 완전 종료 → 재실행 시 브라우저 탭이 유지되는지 (API→재시작 방향은 06-01 트레이서 체크포인트에서 실제 Electron 세션으로 이미 확인됨 — 반대 방향만 미확인)"
+    expected: "재실행 후 로그인 방식 탭이 browser로 표시된다"
+    why_human: "실제 앱 재시작이 필요하다 — settings-store.ts의 왕복 로직은 양방향 대칭으로 구현돼 있고 API 방향은 단위 테스트(79-87행)로 커버되지만, 육안 확인 자체는 수행되지 않았다 (06-VALIDATION.md UAT #1)"
+  - test: "최초 API 모드 선택 시 고지 모달이 실제로 진행을 막는지, 좁은 창에서도 확인 버튼에 닿는지"
+    expected: "모달이 포커스를 잡고 배경 상호작용을 막으며, 창을 최소로 줄여도 확인 버튼이 스크롤 영역 밖에 남아 클릭 가능하다"
+    why_human: "네이티브 <dialog> 포커스 트랩과 실제 창 크기에서의 시각적 레이아웃은 Electron 런타임이 필요하다 (06-VALIDATION.md UAT #2, 06-06-SUMMARY.md D1/D5 human_judgment:true)"
+  - test: "환경변수로 로그인 방식이 잠기면 실제 화면에 잠금 배지만 표시되고 환경변수 원문 값은 어디에도 보이지 않는지"
+    expected: "탭 두 개 모두 비활성화되고 고정 문구(MODE_LABEL) 배지만 보인다"
+    why_human: "실제 환경변수를 설정한 채로 앱을 실행해야 확인 가능하다 (06-VALIDATION.md UAT #3)"
+  - test: "오타 비밀번호로 실제 로그인 시도 시 서버 에러 코드 대신 한국어 설명 문구가 표시되는지"
+    expected: "폼 오류 사유에 맞는 확정 한국어 안내가 표시되고 서버 원문/에러 코드가 노출되지 않는다"
+    why_human: "실계정 로그인 시도가 필요하다 — 이 phase의 모든 자동 검증은 스텁 fetch/DOM 신호 기반 단위 테스트로 닫혀 있다 (06-VALIDATION.md UAT #4)"
 ---
 
-# Phase 06: 로그인 방식 선택 UI + 실패 안내 Verification Report
+# Phase 06: 로그인 방식 선택 UI + 실패 안내 Verification Report (재검증)
 
 **Phase Goal:** 사용자가 로그인 방식(API 통신/브라우저)을 명시적으로 선택하고, 선택 시 제약을 사전 고지받으며, 로그인 실패 시 원인을 한국어로 이해할 수 있다.
-**Verified:** 2026-08-26T06:15:20Z
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Verified:** 2026-08-26T08:12:12Z
+**Status:** human_needed
+**Re-verification:** Yes — gap-closure 라운드(06-08/06-09/06-10) 이후 재검증
 
-> 이 보고서는 ROADMAP.md 원문(성공 기준 2·3은 06-03에서 `[VOID]` 마킹 + D-08/D-09/D-11/D-12
-> 정정본으로 교체됨)을 권위 있는 성공 기준으로 삼는다. SUMMARY.md의 완료 선언은 증거로
-> 취급하지 않고, 아래 각 항목을 코드에서 직접 재확인했다.
+> 이 보고서는 ROADMAP.md 원문(성공 기준 2·3은 06-03에서 `[VOID]` 마킹 + 2026-08-26 정정본으로
+> 교체됨)을 권위 있는 성공 기준으로 삼는다. 이전 `06-VERIFICATION.md`(2026-08-26T06:15:20Z,
+> `gaps_found`, 5/7)가 지목한 두 개의 `partial` 판정 — CR-01(고지 확인 실패 삼킴)과
+> CR-02(validateToken() 원문 노출) — 을 이번 재검증이 **대체**한다. SUMMARY.md/REVIEW-GAPS.md의
+> "닫혔다"는 선언은 증거로 취급하지 않고, 코드를 직접 읽고 회귀 테스트를 재실행해 독립적으로
+> 재확인했다.
+
+## Gap 재검증 결과 요약
+
+| Gap | 이전 판정 | 이번 판정 | 근거 |
+|---|---|---|---|
+| Gap 1 (CR-01, 고지 확인 실패 삼킴) | ⚠ 부분 실패 | ✓ VERIFIED | `login-mode-actions.ts`의 `saveModeStrict`/`saveModeSafe` 타입 분리 — 아래 상세 |
+| Gap 2 (CR-02, validateToken() 원문 노출) | ⚠ 부분 실패 | ✓ VERIFIED | `token-validation-failure.ts`의 구조적 봉인 — 아래 상세 |
 
 ## Goal Achievement
 
@@ -65,126 +55,267 @@ deferred: []
 
 | # | Truth (ROADMAP 정정본 기준) | Status | Evidence |
 |---|---|---|---|
-| 1 | 사용자가 API 통신 또는 브라우저 로그인 방식을 선택할 수 있고, 선택값은 앱 재시작 후에도 유지된다 (기본값 browser) | ✓ VERIFIED | `settings-store.ts`의 `setLoginMode()`/`getLoginMode()`가 tmp+rename 원자적 쓰기로 `userData/settings.json`에 영속하고, `readSettings()`가 `"api"` 외 모든 값을 `DEFAULT_LOGIN_MODE="browser"`로 정규화한다 — 쓰기·읽기 로직이 두 방향에 대해 대칭이다(양방향 왕복 로직 자체는 대칭적으로 구현되어 있으나, 실제 앱 재시작을 통한 브라우저→재시작 방향의 육안 확인은 06-VALIDATION.md에 outstanding UAT로 별도 등록돼 있음 — 아래 "이미 등록된 인간 확인 대기 항목" 참고). `settings-store.test.ts`에 `api` 방향 재시작 라운드트립 단위 테스트(79-87행)가 존재하고 315개 테스트 스위트 전체가 green이다. |
-| 1b | 기존 브라우저 로그인 동작은 변경 없이 선택기 뒤로 배선된다 — 단, 저장된 자격증명 기반 무인 자동 로그인(`tryAutoLogin`/`tryAutoRelogin`)은 D-03에 따라 의도적으로 제거된다 | ✓ VERIFIED | `auth-service.ts:147-206` — `tryAutoLogin()`은 쿠키 세션 복원만 시도하고 `credentialLogin()`을 호출하지 않는다(주석으로 명시). `trySessionRestore()`(구 `tryAutoRelogin()`의 후신, 178-206행)도 동일. `credentialLogin()`의 유일한 호출자는 `ipc-handlers.ts:53`의 `auth:credential-login` 핸들러뿐 — `grep -rn "\.credentialLogin("` 결과 확인. ROADMAP Phase 06 SC1 아래 "⚠ 의도적 편차 (D-03)" 주석이 이 편차를 회귀가 아닌 의도된 변경으로 명시. |
-| 2 | 사용자가 API 모드를 처음 선택하면 ①Weverse 보안 확인 실패 가능성 ②자동 재로그인 부재 — 두 가지 고지를 확인해야만 진행할 수 있다 (D-08/D-09) | ⚠ 부분 실패 (정상 경로만 성립) | `ApiModeNoticeModal.tsx`는 `<dialog>.showModal()`(네이티브 포커스 트랩·backdrop)을 쓰는 차단형 모달이며, 두 문구 모두 D-08 정정본과 정확히 일치하고 반증된 이메일 OTP 서사가 없다. `decideTabClick()`(login-panel-view.ts)는 `shouldShowApiModeNotice(ackedVersion, currentVersion)`이 true일 때만 모달을 열고, 취소/Esc는 `onCancel`로 완전히 분리돼 모드를 저장하지 않는다 — 단위 테스트로 검증됨. **그러나** `settings:set-login-mode` 쓰기가 실패하는 경로에서 "확인해야만 진행" 계약이 거짓으로 성공 보고된다 — 아래 gaps 참고 (CR-01, App.tsx:130-139 / LoginPanel.tsx:95-107). |
-| 3 | `credentialLogin()`이 실제로 마주치는 6가지 실패 신호(캡차/폼 오류/타임아웃/네트워크·런타임 오류/토큰 사다리 실패/미매핑)가 서버 에러 코드 대신 한국어 설명 문구로 표시된다 (D-12) | ✓ VERIFIED | `src/shared/login-failure.ts`의 `mapLoginFailure()`가 6개 `LoginFailureReason` 전부를 exhaustive switch로 매핑하며(신규 값 추가 시 컴파일 타임에 누락 검출), 캡차는 D-13 정정 문구("보안 확인... 브라우저 로그인 사용")로 올바르게 매핑돼 반증된 OTP 서사가 사라졌다. `buildFailureResult()`(auth-service.ts:478-511)가 `message`/`identifier`에 `maskSensitive()`를 명시적으로 적용하는 유일한 관문이며, `credentialLogin()`의 정상 실패 경로들(캡차/타임아웃/폼 오류/사다리 실패/예외)이 전부 이 관문을 거친다. `login-failure.test.ts` 29개 테스트로 6개 사유 전수 검증. `-25003/-25044/-26000/-26004/해외 로그인 차단`은 D-02가 제거한 순수 HTTP 경로에서만 발생해 도달 불가함이 REQUIREMENTS.md/ROADMAP.md에 `[VOID]`로 정정 기록돼 있다. |
-| 3b | 렌더러로 반환되는 모든 실패 message/identifier가 마스킹을 거친 값뿐이다 (R010, 06-05-PLAN must_haves) | ⚠ 부분 실패 | `credentialLogin()` 경로는 위와 같이 정확히 마스킹된다. **그러나** 두 모드가 공유하는 `validateToken()`의 네 개 실패 emit 지점이 서버 응답 원문 최대 200자를 마스킹 없이 그대로 렌더러에 전달한다 — 아래 gaps 참고 (CR-02, auth-service.ts:955-988). SC3 자체(credentialLogin의 6개 신호)는 손상되지 않지만, 이 phase가 "buildFailureResult()가 유일한 마스킹 관문"이라고 세운 전제가 실제로는 두 모드 공유 경로 하나에서 성립하지 않는다. |
-| 4 | 환경변수로 로그인 방식이 잠기면 두 탭 모두 비활성화되고, 잠금 사실만 표시되며 환경변수 원문 값은 노출되지 않는다 (D-06) | ✓ VERIFIED | `resolveLoginMode()`/`isLoginModeLockedByEnv()`(login-mode.ts)가 env 우선순위를 결정하는 유일한 지점이고, `describeLockedMode()`(login-panel-view.ts)는 `MODE_LABEL` 고정 문자열 두 개 중 하나만 끼워 넣어 env 원문 값이 입력/출력 어디에도 등장하지 않는다. `resolveTabView()`가 `active`/`tabsDisabled`/`showBadge` 세 값을 모두 `lockedByEnv`에서 파생시켜 서로 다른 값에서 UI가 거짓말할 여지가 없다. `settings-store.test.ts`(156-175행)로 env 우선순위 단위 테스트 확인. |
-| 5 | 반증된 3단계 계정 API 로그인(OTP) 코드와 문서 서술이 코드베이스·요구사항에서 정리되었다 (D-02/D-11/D-12) | ✓ VERIFIED | `grep -rn "submitOtp\|verifyOtp\|credentialLoginApi\|OtpSession\|needOtp\|auth:submit-otp"` 결과 0건. REQUIREMENTS.md R020/R021, ROADMAP.md Phase 06 SC2/SC3에 `[VOID]` 마킹 + 정정문 + 근거 경로가 병기되어 있고, 반증된 원문은 삭제되지 않고 보존됨(`-25044` grep 다수 잔존 확인). |
+| 1 | 사용자가 API 통신 또는 브라우저 로그인 방식을 선택할 수 있고, 선택값은 앱 재시작 후에도 유지된다 (기본값 browser) | ✓ VERIFIED | 이전 검증에서 확인된 대로 변경 없음 — `settings-store.ts`의 원자적 왕복 로직, 24개 단위 테스트. 이번 재검증 대상이 아니다(회귀 없음, 354개 스위트 green으로 재확인). |
+| 1b | 기존 브라우저 로그인 동작은 변경 없이 선택기 뒤로 배선된다 — 단, 저장된 자격증명 기반 무인 자동 로그인은 D-03에 따라 의도적으로 제거된다 | ✓ VERIFIED | 변경 없음. `git diff`로 `tryAutoLogin`/`trySessionRestore` 관련 코드가 gap-closure 커밋에서 건드려지지 않았음을 재확인. |
+| **2 (Gap 1)** | 사용자가 API 모드를 처음 선택하면 두 가지 고지를 확인해야만 진행할 수 있다 — **확인 저장이 실패하면 모달이 닫히지 않고 모드도 바뀌지 않는다** | ✓ VERIFIED (재검증 통과) | 아래 "Gap 1 상세 재검증" 참고 |
+| **3b (Gap 2)** | 렌더러로 반환되는 모든 실패 message/identifier가 마스킹을 거친 값뿐이다 (R010) | ✓ VERIFIED (재검증 통과) | 아래 "Gap 2 상세 재검증" 참고 |
+| 3 | `credentialLogin()`이 실제로 마주치는 6가지 실패 신호가 한국어 설명 문구로 표시된다 (D-12) | ✓ VERIFIED | 변경 없음 (06-09/06-10이 명시적으로 `login-failure.ts`/`LoginFailureReason` union을 건드리지 않았다 — `git diff HEAD~1 -- src/shared/login-failure.ts` 공백 확인). |
+| 4 | 환경변수로 로그인 방식이 잠기면 두 탭 모두 비활성화되고, 잠금 사실만 표시되며 환경변수 원문 값은 노출되지 않는다 (D-06) | ✓ VERIFIED | 변경 없음. |
+| 5 | 반증된 3단계 계정 API 로그인(OTP) 코드와 문서 서술이 코드베이스·요구사항에서 정리되었다 (D-02/D-11/D-12) | ✓ VERIFIED | 변경 없음. `06-05-SUMMARY.md`의 잘못된 완료 선언도 이번 라운드(06-09)에서 D-11 관례대로 `[VOID]` + 정정문으로 처리됨(삭제 아님) — 아래 참고. |
 
-**Score:** 5/7 truths verified (2 partial — 코드 결함으로 실패 경로에서만 계약이 깨짐, 정상 경로는 성립)
+**Score:** 7/7 truths verified (이전 라운드의 2개 partial이 모두 VERIFIED로 전환)
+
+### Gap 1 상세 재검증 — 고지 확인 흐름의 실패 삼킴 (CR-01)
+
+**이전 결함:** `LoginPanel.tsx`의 `handleAcknowledge()`는 `onSetLoginMode()`가 실패 시 예외를
+던질 것을 전제로 했지만, 실제 주입된 `App.tsx`의 `handleSetLoginMode()`는 절대 reject하지
+않았다. 그 결과 디스크 쓰기가 실패해도 모달이 "성공"으로 닫혔다.
+
+**재검증 절차 (코드 직접 확인):**
+
+1. `src/renderer/login-mode-actions.ts` (신규) — `createLoginModeActions()`가 내부적으로
+   두 개의 클로저를 만든다:
+   - `saveModeStrict(mode)`: `persistLoginMode()`가 reject하면 그대로 위로 던진다(삼키지 않음).
+   - `saveModeSafe(mode)`: `saveModeStrict`를 감싸 예외를 삼키고 배너 문구만 표시한다.
+
+   `grep -n "^export"` 결과 이 파일은 `LOGIN_MODE_SAVE_ERROR`, `NOTICE_SAVE_ERROR`,
+   `LoginModeActionDeps`, `AcknowledgeOutcome`, `LoginModeActions`, `createLoginModeActions`
+   6개만 export한다 — `saveModeStrict`/`saveModeSafe`는 **함수 스코프 클로저이며 모듈
+   스코프에도 존재하지 않는다.** 이전 검증이 "unexported"라고 표현한 것보다 봉인이 더
+   강하다 — 다른 모듈이 이 함수를 import할 방법 자체가 없다.
+
+2. **두 반환 함수는 서로 다른 타입이다:**
+   - `setLoginMode: (mode: LoginMode) => Promise<void>` (탭 클릭 경로, 절대 reject 안 함)
+   - `acknowledgeApiModeNotice: (version: number) => Promise<AcknowledgeOutcome>`
+     (`AcknowledgeOutcome = { ok: true } | { ok: false; error: string }`)
+
+   `LoginPanel.tsx`의 `LoginPanelProps`도 이 두 시그니처를 그대로 반영해
+   `onSetLoginMode: (mode) => Promise<void>`와 `onAcknowledgeNotice: (version) => Promise<AcknowledgeOutcome>`로
+   선언돼 있다 — 파라미터·반환 타입이 모두 달라 두 prop을 서로 바꿔 연결하면 타입체크가 깨진다.
+   `App.tsx`는 `onSetLoginMode={loginModeActions.setLoginMode}` /
+   `onAcknowledgeNotice={loginModeActions.acknowledgeApiModeNotice}`로 각각 정확히 배선돼 있다
+   (`App.tsx:179, 181`).
+
+3. **`LoginPanel.tsx`의 `handleAcknowledge()`(99-108행)가 실제로 실패를 반영하는지 직접 확인:**
+   ```
+   const outcome = await onAcknowledgeNotice(noticeAck.currentVersion);
+   if (outcome.ok) {
+     setNoticeOpen(false);
+   } else {
+     setNoticeSaveError(outcome.error);
+   }
+   ```
+   더 이상 try/catch로 실패를 추론하지 않는다 — `AcknowledgeOutcome.ok`를 직접 분기한다.
+   `outcome.ok`가 `false`이면 `setNoticeOpen(false)`가 **호출되지 않는다** — 모달은
+   `ApiModeNoticeModal`의 `open` prop이 그대로 `true`로 남아 네이티브 `<dialog>`가 열린 채다.
+
+4. **행동 회귀 테스트로 직접 확인:** `login-mode-actions.test.ts` Test 1이 정확히 이 시나리오를
+   검증한다 — `persistLoginMode`가 reject하도록 모킹한 뒤 `acknowledgeApiModeNotice(1)`을 호출해
+   `outcome.ok === false`와 `outcome.error === NOTICE_SAVE_ERROR`를 단언한다.
+   `npx vitest run src/renderer/__tests__/login-mode-actions.test.ts` → `PASS (7) FAIL (0)`로
+   재실행해 확인. Test 5/6은 실패 시 `onModeApplied`가 호출되지 않음(상태 무결성)과
+   `onNoticeAcked`가 이미 호출된 상태로 남는 부작용(IN-06, 의도된 트레이드오프)을 각각
+   검증한다.
+
+**판정 근거:** 상태 전이 자체("확인 저장 실패 → 모달 유지")는 두 계층으로 나뉘어 증명된다 —
+① `acknowledgeApiModeNotice()`가 실패 시 `{ ok: false }`를 반환한다는 사실은 행동 테스트로
+직접 증명됐고, ② 그 반환값을 받는 `LoginPanel.tsx`의 분기(`if (outcome.ok) setNoticeOpen(false)`)는
+단순 조건문이라 코드를 읽는 것만으로 결정론적으로 확인 가능하다(런타임 DOM이 필요한 애매함이
+없다). 두 증거를 합쳐 ✓ VERIFIED로 판정한다 — 다만 `<dialog>`가 실제 화면에서 열린 채로
+보이는지, 그 상태에서 인라인 오류 문구가 실제로 렌더링되는지의 **시각적** 확인은 여전히
+Electron 런타임이 필요하며, 이는 06-06-SUMMARY.md D5(human_judgment:true)로 이미 등록돼 있고
+아래 Human Verification Required에 그대로 이월했다.
+
+**WR-01(저장 중 Esc 경합)도 같은 라운드에서 해소됐는지 확인:** `decideNoticeCancel(saving)`
+단일 판단 지점이 Cancel 버튼(`disabled={noticeSaving}`)과 `<dialog>`의 네이티브 `cancel`
+이벤트(Esc) 양쪽을 모두 통과하도록 `LoginPanel.tsx:116`에서 배선돼 있다. `settings:set-login-mode`/
+`settings:ack-notice`는 main 프로세스에서 동기 `fs.writeFileSync`+`renameSync`로 실행되므로
+무한 대기 경로가 없다는 것도 `settings-store.ts` 재확인으로 검증했다.
+
+### Gap 2 상세 재검증 — validateToken() 원문 노출 (CR-02)
+
+**이전 결함:** `validateToken()`의 네 실패 지점(401 세션 복원 실패, `!res.ok`, JSON 파싱 실패,
+`fanId` 없음)이 `buildFailureResult()`/`mapLoginFailure()`를 우회하고 서버 응답 원문
+`rawBody.slice(0, 200)`을 마스킹 없이 그대로 `_emit()`했다.
+
+**재검증 절차 (코드 직접 확인):**
+
+1. **`rawBody`의 전체 사용처를 재확인:** `grep -n "rawBody" src/main/services/auth-service.ts` →
+   4곳뿐이다: 선언(961행), 대입(963/965행), `logService.info` 진단 로그(967행),
+   `JSON.parse(rawBody)`(991행). **`_emit()`/`this.emitTokenValidationFailure()` 어디에도
+   `rawBody`가 전달되지 않는다** — 이전 검증이 지목한 4개 emit 지점을 직접 읽어 확인.
+
+2. **`src/shared/token-validation-failure.ts`(신규)가 구조적 봉인을 제공하는지 확인:**
+   `TokenValidationGuidanceContext`는 `{ status?: number }` 필드 하나뿐이다. 서버 응답 텍스트를
+   담을 필드가 타입에 없다 — `describeTokenValidationFailure(kind, context)`의 구현
+   (`switch`문 4개 분기 전체)도 `context?.status` 외의 어떤 필드도 읽지 않는다. 실제 호출부
+   (`auth-service.ts:979, 985`)는 리터럴 객체(`{ status: res.status }`)만 사용한다.
+
+3. **네 실패 지점이 전부 단일 관문 `emitTokenValidationFailure()`을 거치는지 확인:**
+   - 401(세션 복원 실패): `this.emitTokenValidationFailure("unauthorized", "token-expired")` (979행)
+   - `!res.ok`: `this.emitTokenValidationFailure("http-error", "login-failed", { status: res.status })` (985행)
+   - JSON 파싱 실패: `this.emitTokenValidationFailure("parse-error", "login-failed")` (993행)
+   - `fanId` 없음: `this.emitTokenValidationFailure("missing-fan-id", "login-failed")` (998행)
+
+   `emitTokenValidationFailure()`(1030-1040행)는 `describeTokenValidationFailure()`가 반환한
+   확정 문구를 `maskSensitive()`에 통과시킨 뒤 `_emit()`한다 — 이 값은 이 모듈이 스스로 만든
+   고정 한국어 문구뿐이므로 마스킹이 실제로 바꿀 것은 없지만, "렌더러로 나가는 문구는 전부
+   마스킹 관문을 통과한다"는 이 phase의 전제를 이 경로에서도 참으로 만든다.
+
+4. **관측성 손실이 없는지 확인:** `logService.info("AuthService", `validateToken body: ${rawBody.slice(0, 500)}`)`
+   (967행)가 모든 분기 이전에 무조건 실행돼 원문 500자가 항상 로그에 남는다 — `rawBody`를
+   화면에서 제거했지만 개발자 진단 경로에서는 사라지지 않았다.
+
+5. **행동 테스트로 직접 확인:** `token-validation-failure.test.ts`(7개 테스트)가 4개 kind 모두
+   비어있지 않은 서로 다른 한국어 문장을 반환함, `status` context 유무에 따른 identifier 생성
+   여부, `unauthorized`/`http-error(status 없음)` 반환 객체에 identifier 프로퍼티 자체가 없음을
+   단언한다. `auth-service.test.ts`에 실제 `fetch` 응답을 주입해 `emit`된 `message`에 문맥
+   없는 150~180자 토큰형 문자열이 없음을 단언하는 테스트도 포함돼 있다(06-REVIEW-GAPS.md가
+   확인한 내용을 재실행으로 재확인). `npx vitest run src/shared/__tests__/token-validation-failure.test.ts src/main/services/__tests__/auth-service.test.ts` → `PASS (125) FAIL (0)`.
+
+**판정 근거:** ✓ VERIFIED. 이 truth는 "원문이 화면에 나타나지 않는다"는 부정 조건이며, 코드가
+그 값을 애초에 emit 경로로 흘려보낼 타입/데이터 경로 자체를 갖지 않는다는 사실을 직접 읽어
+확인했다(구조적 증명) — 런타임에서만 관측 가능한 상태 전이가 아니라 정적으로 결정되는 데이터
+흐름이므로 소스 확인만으로 충분하다.
+
+**IN-05(타입 봉인 서술의 과장)에 대한 판단:** `06-REVIEW-GAPS.md`가 지적한 대로,
+`@ts-expect-error` 테스트는 리터럴 객체를 직접 인자로 쓸 때만 초과 프로퍼티 검사에 걸리고,
+변수를 거치면 통과한다 — "타입 경로 자체가 없다"는 주석이 TypeScript의 보증 범위보다 강하게
+서술돼 있다. 그러나 이 verification의 결론(원문이 emit되지 않는다)에는 영향이 없다 — 실제
+구현이 `status` 외 필드를 읽지 않는다는 사실은 변수 경유 여부와 무관하게 성립하고, 두 실제
+호출부도 리터럴만 쓴다. 문서 정확도 문제이지 must-have 실패가 아니다.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `src/main/services/settings-store.ts` | 원자적 설정 영속 (D-04/D-05) | ✓ VERIFIED | 존재·실질적 구현·`ipc-handlers.ts`에서 사용·24개 단위 테스트로 배선 확인 |
-| `src/shared/api-mode-notice.ts` | 고지 버전 재노출 판정 (D-10) | ✓ VERIFIED | `shouldShowApiModeNotice()` 순수 함수, `login-panel-view.ts`의 `decideTabClick()`에서 사용 |
-| `src/main/login-mode.ts` | env 우선순위 결정 (D-06) | ✓ VERIFIED | `resolveLoginMode()`/`isLoginModeLockedByEnv()`, `settings-store.ts`에서 사용 |
-| `src/shared/login-failure.ts` | 실패 사유 → 한국어 안내 (D-12/D-13/D-14, R020) | ✓ VERIFIED | `mapLoginFailure()`/`classifyCredentialLoginSignal()`, `auth-service.ts`·`login-panel-view.ts`에서 사용, 29개 테스트 |
-| `src/main/services/auth-service.ts` | 단일 자격증명 로그인 경로 + 마스킹된 실패 반환 (D-01/D-02/D-13, R010) | ⚠ HOLLOW (부분) | `credentialLogin()` 경로는 견고하나 `validateToken()`의 4개 emit 지점이 마스킹 관문을 우회함 (CR-02) |
-| `src/renderer/components/ApiModeNoticeModal.tsx` | 차단형 고지 모달 (D-08/D-09) | ✓ VERIFIED | 네이티브 `<dialog>.showModal()`, 확정 문구 2종, Esc/취소 분리 |
-| `src/renderer/App.tsx` + `src/renderer/components/LoginPanel.tsx` | 고지 확인 ↔ 모드 저장 배선, 탭 상시 렌더링 (D-07, Interaction Contract 1) | ⚠ HOLLOW (부분) | 탭 상시 렌더링·정상 경로 배선은 맞으나 `handleAcknowledge`↔`handleSetLoginMode` 계약 불일치 (CR-01) — 아무 렌더러 컴포넌트 테스트도 이 결함을 잡지 못함 |
-| `src/renderer/components/login-panel-view.ts` | 순수 판단 로직 (탭 클릭 결정·잠금 배지·실패 뷰) | ✓ VERIFIED | `resolveTabView`/`decideTabClick`/`buildFailureView`/`describeLockedMode`, 21개 테스트로 커버 |
+| `src/renderer/login-mode-actions.ts` | 탭 클릭/고지 확인 두 실패 계약을 타입으로 분리 (06-08) | ✓ VERIFIED | `saveModeStrict`/`saveModeSafe` 함수 스코프 봉인, `AcknowledgeOutcome` 판별 유니온, 7개 단위 테스트 |
+| `src/shared/token-validation-failure.ts` | validateToken() 실패 → 상태 코드 기반 확정 문구, 서버 원문 타입 경로 없음 (06-09) | ✓ VERIFIED | `TokenValidationGuidanceContext = { status?: number }`, 7개 단위 테스트 |
+| `src/main/services/auth-service.ts` | 단일 자격증명 로그인 경로 + 마스킹된 실패 반환 (D-01/D-02/D-13, R010) | ✓ VERIFIED | `credentialLogin()` 경로 견고(이전과 동일), `validateToken()` 4개 emit 지점이 `emitTokenValidationFailure()` 단일 관문으로 재배선됨, `btnEnabled` 7번째 미분류 경로도 `buildFailureResult()` 관문에 태워짐(06-10) — 더 이상 HOLLOW 아님 |
+| `src/renderer/App.tsx` + `src/renderer/components/LoginPanel.tsx` | 고지 확인 ↔ 모드 저장 배선, 탭 상시 렌더링 (D-07, Interaction Contract 1) | ✓ VERIFIED | `handleAcknowledge()`가 `AcknowledgeOutcome.ok`를 직접 분기, 옛 `handleSetLoginMode`/try-catch 추론 로직 완전 제거(`grep -c "handleSetLoginMode"` 0건) — 더 이상 HOLLOW 아님 |
+| `src/shared/mask.ts` | 문맥 없는 JWT 형태 문자열도 마스킹 (06-10, WR-02) | ✓ VERIFIED | `SENSITIVE_PATTERNS` 14번째 규칙(구조 기반, 배열 맨 끝), 양성 3 + 훼손 방지 4개 테스트, 기존 13개 규칙 무수정 |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |---|---|---|---|---|
-| `preload.ts` settings 네임스페이스 | `shared/types.ts` IpcApi.settings | 시그니처 일치 | ✓ WIRED | 4채널(`get-login-mode`/`set-login-mode`/`get-notice-ack`/`ack-notice`) 등록·해제·타입 선언 전부 일치 (리뷰 확인 + grep 재확인) |
-| `ipc-handlers.ts` settings:set-login-mode | `SettingsStore.setLoginMode()` | 직접 호출, catch 없음 | ✓ WIRED (하지만 렌더러 소비 지점에서 문제) | main 프로세스는 실패를 삼키지 않고 그대로 reject 전파 — `settings-store.test.ts` 219-249행으로 확인. 문제는 이 reject를 소비하는 렌더러 쪽 계약(CR-01)에 있다. |
-| `handleAcknowledge()` (LoginPanel.tsx) | `onSetLoginMode()` prop → `handleSetLoginMode()` (App.tsx) | await + catch | ✗ NOT_WIRED (계약 불일치) | `handleSetLoginMode()`가 절대 reject하지 않아 `handleAcknowledge()`의 catch가 실패 시에도 실행되지 않는다 (CR-01) |
-| `credentialLogin()` 실패 반환 | `buildFailureResult()` → `maskSensitive()` | 명시적 래핑 | ✓ WIRED | auth-service.ts:446-511 |
-| `validateToken()` 실패 emit | `maskSensitive()` | (경로 없음) | ✗ NOT_WIRED | auth-service.ts:955-988이 `buildFailureResult()`/`mapLoginFailure()`를 우회하고 rawBody 원문을 직접 emit (CR-02) |
-| `CredentialLoginResult.reason` | `mapLoginFailure().suggestBrowserSwitch` → 전환 버튼 노출 | `buildFailureView()` | ✓ WIRED | login-panel-view.ts, LoginPanel.tsx:300 |
-| `lockedByEnv` | 탭 disabled ↔ 배지 렌더링 | `resolveTabView()` 단일 파생 지점 | ✓ WIRED | 세 값이 한 함수에서 파생돼 불일치 불가능 |
+| `handleAcknowledge()` (LoginPanel.tsx) | `onAcknowledgeNotice()` prop → `acknowledgeApiModeNotice()` (login-mode-actions.ts) | `AcknowledgeOutcome` 판별 유니온 직접 분기 | ✓ WIRED | 이전에는 NOT_WIRED(CR-01) — 이번 라운드에서 타입 수준으로 재배선됨 |
+| `validateToken()` 4개 실패 지점 | `emitTokenValidationFailure()` → `describeTokenValidationFailure()` → `maskSensitive()` → `_emit()` | 단일 관문 함수 호출 | ✓ WIRED | 이전에는 NOT_WIRED(CR-02) — 4개 지점 전부 재확인 |
+| `buildFailureResult()`의 `overrideMessage` | `maskSensitive(messageText)` | 조건 없이 동일 경로 통과 | ✓ WIRED (마스킹 우회 아님) | `auth-service.ts:511, 525` 직접 확인 — override 여부와 무관하게 동일한 마스킹을 거친다. `overrideMessage`에 토큰형 문자열을 섞은 테스트로 검증됨 |
+| `btnEnabled` 실패 분기 | `buildFailureResult()` → `_emit()` | 형제 분기와 동일 형태 | ✓ WIRED | 이전에는 관문을 완전히 우회하는 7번째 경로(WR-03) — 이번 라운드에서 관문에 태워짐, 사용자 문구 보존 확인 |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |---|---|---|---|---|
-| R016 | 06-01, 06-04, 06-06, 06-07 | 로그인 방식 선택 + 영속 | ✓ SATISFIED | settings-store.ts 영속 로직, resolveTabView 배선, D-03 무인 로그인 가드 확인 |
-| R020 | 06-02, 06-03, 06-04, 06-05, 06-06, 06-07 | API 로그인 실패 사유 한국어 안내 | ✓ SATISFIED (credentialLogin 경로) — validateToken 공유 경로는 마스킹 우회 | login-failure.ts 6개 사유 매핑 정확, 단 CR-02가 별도 공유 경로에서 R010(마스킹) 원칙을 어김 |
-| R021 | 06-01, 06-03, 06-06, 06-07 | API 모드 제약 사전 고지 (차단형) | ✓ SATISFIED (정상 경로) — 실패 경로는 CR-01로 계약 위반 | ApiModeNoticeModal.tsx 문구·차단 구조 정확, 단 저장 실패 시 거짓 성공 보고 (CR-01) |
+| R016 | 06-01, 06-04, 06-06, 06-07, 06-08 | 로그인 방식 선택 + 영속 | ✓ SATISFIED | 이전과 동일 + 06-08이 고지 확인 경로의 저장 실패 계약을 닫음 |
+| R020 | 06-02, 06-03, 06-04, 06-05, 06-06, 06-07, 06-09, 06-10 | API 로그인 실패 사유 한국어 안내 | ✓ SATISFIED | `credentialLogin()` 경로(기존) + `validateToken()` 공유 경로(06-09) + 7번째 미분류 경로(06-10) 모두 마스킹 관문을 지난다. 더 이상 부분 충족 아님 |
+| R021 | 06-01, 06-03, 06-06, 06-07, 06-08 | API 모드 제약 사전 고지 (차단형) | ✓ SATISFIED | 문구·차단 구조(기존) + 저장 실패 시 계약 위반(CR-01)이 06-08로 해소됨. 더 이상 부분 충족 아님 |
 
-ORPHANED 요구사항 없음 — REQUIREMENTS.md에서 Phase 06으로 매핑된 R016/R020/R021이 모두 7개 플랜 중 하나 이상의 `requirements` 필드에 등장한다.
+ORPHANED 요구사항 없음.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |---|---|---|---|---|
-| (없음) | - | TBD/FIXME/XXX/TODO/HACK/PLACEHOLDER | - | phase가 수정한 13개 파일 전수 grep 결과 0건 |
-| `src/renderer/App.tsx` | 130-139 | 실패를 삼키고 재던지지 않는 catch — 호출부가 서로 다른 계약을 기대 | 🛑 Blocker | CR-01, 위 gaps 참고 |
-| `src/main/services/auth-service.ts` | 955-988 | 마스킹 관문을 우회하는 원문 노출 | 🛑 Blocker | CR-02, 위 gaps 참고 |
-| `src/renderer/components/LoginPanel.tsx` | 109-112 | `handleCancelNotice`가 `noticeSaving` 진행 중 가드 없음 — 확인 저장 중 Esc를 눌러도 취소로 시각적으로 닫히고, 진행 중이던 저장이 이후 성공하면 조용히 API 모드로 전환됨 | ⚠ Warning | 06-REVIEW.md WR-01. 이번 검증에서 phase 목표(SC2 "확인해야만 진행")의 직접 실패 사유로 분류하지는 않았으나 관련 레이스 컨디션. |
-| `src/shared/mask.ts` | 38-66 | `maskSensitive()`가 `key: value` 패턴만 매칭 — 문맥 없는 원문 토큰(예: 서버가 임의 문자열 안에 토큰형 문자열을 포함해 반환하는 경우)은 통과 가능 | ⚠ Warning | 06-REVIEW.md WR-02 |
-| `src/main/services/auth-service.ts` | 312-332 | "로그인 버튼이 활성화되지 않았습니다" 실패가 `buildFailureResult()`/6개 사유 체계를 완전히 우회하는 7번째 미분류 경로 | ⚠ Warning | 06-REVIEW.md WR-03 |
-| `src/main/ipc-handlers.ts` | 118-120 | `settings:set-login-mode` 핸들러가 `mode` 값을 런타임 검증하지 않음 | ⚠ Warning | 06-REVIEW.md WR-04 |
+| (없음) | - | TBD/FIXME/XXX/TODO/HACK/PLACEHOLDER | - | gap-closure 7개 파일 전수 grep 결과 0건 |
+| `src/shared/mask.ts` | 66-84 | 문맥 없는 JWT 마스킹 규칙(14번째)이 구조만으로 매칭 — 실제 서버 임의 문자열이 우연히 3분절·10자 이상 구조를 가지면 과잉 마스킹(관측성 저하) 가능. 06-10-SUMMARY.md도 이 규칙이 "완전하지 않다"고 인정하나 과소 마스킹 방향만 언급 | ⚠ Warning | 06-REVIEW-GAPS.md WR-05. 보안 방향(under-masking)의 실패가 아니라 관측성 방향(over-masking)의 실패이며, 이 phase의 두 must-have("노출되지 않는다")를 손상시키지 않는다. 1차 방어선(구조적 봉인, `emitTokenValidationFailure()`)은 이 규칙에 의존하지 않는다. 다음 phase 또는 실사용 보고 시 규칙 하한 조정 권고 |
+| `src/shared/token-validation-failure.ts` | 32-35 | "타입 경로 자체가 없다"는 주석이 TypeScript 초과 프로퍼티 검사의 실제 범위(리터럴 인자에서만 적용)보다 강하게 서술됨 | ℹ Info | 06-REVIEW-GAPS.md IN-05. 실제 구현이 `status` 외 필드를 읽지 않아 기능적 위험은 없음 — 문서 정확도 문제 |
+| `src/renderer/login-mode-actions.ts` | 77-92 | 확인 경로에서 모드 저장만 실패하면(ack는 성공) 이후 탭 재클릭 시 고지 모달 없이 조용히 재시도됨 — D-09 의도와 충돌하지 않으나 SUMMARY에 결정으로 기록되지 않음 | ℹ Info | 06-REVIEW-GAPS.md IN-06. 코드 변경 불필요 판단 |
+| `src/main/services/auth-service.ts` | 983-986 | `!res.ok` 로그 줄에서 `rawBody`가 빠짐 — 관측성 손실은 없음(967행이 모든 분기 전에 무조건 500자 로그) | ℹ Info | 06-REVIEW-GAPS.md IN-07 |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| 전체 테스트 스위트 green | `npm test` (`rtk vitest run`) | `PASS (315) FAIL (0)` — 16개 파일 | ✓ PASS |
-| 타입체크 clean (게이트 문서·orchestrator 사전 측정치 인용, 이번 검증에서 재확인 안 함 — 코드 변경 없는 검증 세션이라 결과가 달라질 수 없음) | `npm run typecheck`, `npm run typecheck:main` | orchestrator 사전 측정: 0 에러 | ✓ PASS (인용) |
-| 빌드 성공 (orchestrator 사전 측정치 인용) | `npm run build` | orchestrator 사전 측정: exit 0 | ✓ PASS (인용) |
-| CR-02 rawBody 노출 코드 도입 시점 | `git log -S"rawBody.slice(0, 200)" -- src/main/services/auth-service.ts` | 커밋 816970a, 2026-05-14 — Phase 06(2026-08-26) 훨씬 이전 | ✓ PASS (리뷰의 "phase 06 이전부터 존재" 주장 확인) |
-| `credentialLogin()` 단일 호출자 확인 | `grep -rn "\.credentialLogin(" src/main` | `ipc-handlers.ts:53` 한 곳뿐 | ✓ PASS |
-| 반증된 OTP 코드 완전 삭제 확인 | `grep -rn "submitOtp\|verifyOtp\|credentialLoginApi\|OtpSession\|needOtp\|auth:submit-otp"` | 0건 | ✓ PASS |
+| 전체 테스트 스위트 green (gap-closure 이후) | `npm test` | `Test Files 18 passed (18)` / `Tests 354 passed (354)` | ✓ PASS |
+| Gap 1 회귀 테스트 (CR-01) | `npx vitest run src/renderer/__tests__/login-mode-actions.test.ts` | `PASS (7) FAIL (0)` | ✓ PASS |
+| Gap 2 회귀 테스트 (CR-02) | `npx vitest run src/shared/__tests__/token-validation-failure.test.ts src/shared/__tests__/mask.test.ts src/main/services/__tests__/auth-service.test.ts` | `PASS (125) FAIL (0)` | ✓ PASS |
+| `_emit()`에 `rawBody` 전달 여부 | `grep -n "rawBody" src/main/services/auth-service.ts` | 4곳 전부 로그/파싱 용도, `_emit()` 인자 아님 | ✓ PASS |
+| `overrideMessage`가 관문을 우회하는지 | `sed -n '505,530p' auth-service.ts` 직접 확인 | `maskSensitive(messageText)` — override 여부 무관하게 동일 경로 | ✓ PASS |
+| 타입체크 clean | `npm run typecheck`, `npm run typecheck:main` | 각 0 에러 | ✓ PASS |
+| 빌드 성공 | `npm run build` | exit 0 | ✓ PASS |
+| `login-failure.ts`/`package.json` 무변경 확인 (프로히비션 준수) | `git log --oneline -- src/shared/login-failure.ts package.json package-lock.json` | gap-closure 커밋(06-08~06-10) 어디에도 등장하지 않음 | ✓ PASS |
+| `saveModeStrict`/`saveModeSafe` 모듈 밖 재사용 가능성 | `grep -rn "saveModeStrict\|saveModeSafe" src` | `login-mode-actions.ts` 내부(주석 포함)에만 등장 — export 없음, 함수 스코프 | ✓ PASS |
 
 ### Probe Execution
 
-이 phase는 마이그레이션/CLI 도구 phase가 아니며 `scripts/*/tests/probe-*.sh` 관례를 사용하지 않는다. PLAN/SUMMARY/VALIDATION 어디에도 probe 스크립트 언급이 없다. **SKIPPED (no probe scripts declared or found).**
+이 phase는 마이그레이션/CLI 도구 phase가 아니며 probe 스크립트를 사용하지 않는다.
+**SKIPPED (no probe scripts declared or found).**
 
-### 이미 등록된 인간 확인 대기 항목 (이번 검증에서 새로 발견한 것 아님)
+### WINDOWS.md 편차 항목 판단
 
-이 phase의 06-VALIDATION.md는 이미 4개의 자동화 불가 UAT 항목과 06-06-SUMMARY.md의 2개
-`human_judgment: true` 항목을 등록해 두었다. known_state에 따르면 사용자가 이번 실행 중
-다음 두 가지는 실제 Electron 세션으로 직접 확인했다:
+06-09가 남긴 `deviation` 항목(`validateToken()`에 raw `_emit()` 2개가 남아야 한다는 acceptance
+criterion이 실제로는 3개다)을 직접 재확인했다. 세 번째는 `localExpired` 분기(912행)의 사전
+존재 하드코딩 `_emit()`("JWT 만료 — 다시 로그인해주세요")로, 06-09 태스크가 명시적으로 건드리지
+말라고 지시한 브랜치다. 이 emit은 `rawBody`나 서버 응답을 전혀 참조하지 않는 고정 한국어
+문자열만 담는다 — gap 2가 다루는 "서버 원문 노출" 문제와 무관하다. 별도로 `fetch` catch
+블록(953행)의 emit은 `err.message`(JS 런타임 예외 메시지)를 담는데, 이 역시 gap 2가 지목한
+4개 지점(401/!res.ok/파싱실패/fanId없음)에 포함되지 않았고 서버 응답 본문이 아니다.
+
+**판단:** 이 편차는 실질적 결함이 아니라 acceptance criterion의 카운트 산정 실수(bookkeeping)다.
+gap 2의 본질(서버 응답 원문이 마스킹 없이 렌더러로 전달되지 않는다)은 손상되지 않았다.
+`status: open`으로 남겨두는 것이 적절하다 — 정정이 필요한 것은 코드가 아니라 06-09-PLAN의
+acceptance criterion 문구다. 다음 phase가 이 편차를 재작업 사유로 오인하지 않도록 여기 명시해
+둔다.
+
+### 06-REVIEW-GAPS.md 발견 중 must-have에 영향을 주는 것이 있는지 판단
+
+06-REVIEW-GAPS.md(2026-08-26T17:10:00Z, Critical 0 / Warning 1(WR-05) / Info 3)를 직접 읽고
+각 항목이 이번 재검증의 두 must-have("확인해야만 진행" 계약, "마스킹을 통과한 값만 노출")에
+영향을 주는지 판단했다:
+
+- **WR-05** (문맥 없는 JWT 규칙의 과잉 마스킹 가능성): 방향이 반대다 — "노출되지 않아야 할 것이
+  노출됨"이 아니라 "노출돼야 할 정상 진단 정보가 과도하게 지워질 수 있음". Gap 2의 must-have를
+  위협하지 않는다. 위 Anti-Patterns 표에 Warning으로 기록해 다음 phase가 참고하게 했다.
+- **IN-05/IN-06/IN-07**: 전부 문서 정확도·의도 명시 부족·로그 줄 분리 관련 Info 수준 관찰이며,
+  기능적 결함이 아니라고 리뷰 자체가 명시한다. 재확인 결과 동의한다.
+
+**결론:** 06-REVIEW-GAPS.md의 어떤 발견도 must-have 실패를 재구성하지 않는다.
+
+### 이미 등록된 인간 확인 대기 항목 — 이번 재검증에서도 그대로 유지
+
+이전 검증과 동일하게, 06-VALIDATION.md에 등록된 4개 UAT 항목과 06-06-SUMMARY.md의 2개
+`human_judgment: true` 항목(D1: 탭 클릭→모달 표시→취소→탭 원복 등 실제 인터랙션, D5: 저장
+실패 시 실제 화면에 모달이 열린 채 오류가 보이는지 + 좁은 창에서 버튼 도달성)은 이번 gap-closure
+라운드가 해소한 범위(코드 수준 실패 계약, 마스킹 관문)와 별개의 검증 축이다. Known state에
+따르면 다음 두 가지는 사용자가 06-01 트레이서 체크포인트에서 실제 Electron 세션으로 이미
+확인했다:
 - API 모드 선택 → 앱 완전 종료 → 재실행 시 탭 유지
 - 로그인 상태에서 탭 전환 시 "로그인 완료" 배지 유지 (D-07)
 
-다음은 여전히 미확인 상태이며, 이 보고서가 임의로 통과 처리하지 않는다:
-- 브라우저 모드 → 재시작 방향의 영속 확인 (코드상 대칭 구현·단위 테스트로 API 방향만 직접
-  커버되어 신뢰도는 높으나, 육안 확인 자체는 미수행)
-- 최초 고지 차단 동작의 실제 인터랙션(포커스 트랩, 좁은 창에서 버튼 도달성)
+**이전 검증과 달리, 이번 재검증은 이 항목들을 frontmatter `human_verification`에 포함시켜
+상태를 `human_needed`로 판정한다.** 이전 라운드는 gaps_found(더 높은 우선순위)가 이미 성립해
+이 판단이 필요하지 않았다. 이제 코드 수준 gap이 모두 닫힌 상태에서, 이 phase가 정말
+"완료"인지 판단하려면 이 4+2개 항목 중 미확인 상태로 남은 것들에 대한 사람의 확인이 필요하다
+— 이 검증이 그것을 임의로 통과 처리할 권한은 없다:
+- 브라우저 모드 → 재시작 방향의 영속 확인 (API 방향만 실제 확인됨, 코드는 대칭 구현 + 단위 테스트로 신뢰도 높음)
+- 최초 고지 차단 동작의 실제 인터랙션(포커스 트랩, 좁은 창에서 버튼 도달성) — D1/D5
 - 환경변수 잠금 시 실제 화면 표시
 - 오타 비밀번호로 실제 로그인 시도 시 실패 안내 문구
 
-이 항목들은 gaps_found 판정에 영향을 주지 않는다(이미 06-VALIDATION.md에 별도 등록되어
-있고, 이 검증이 다시 만들어내는 새 발견이 아니다). 다만 CR-01/CR-02 gap이 해결된 후에도
-이 UAT 항목들은 별도로 인간이 확인해야 한다.
-
 ### Gaps Summary
 
-이번 검증은 06-REVIEW.md가 지목한 2개 Critical 발견을 코드를 직접 읽어 독립적으로
-재확인했고, 둘 다 실재하는 결함으로 확정했다.
+이번 재검증은 06-VERIFICATION.md(2026-08-26T06:15:20Z)가 `gaps_found`로 판정했던 CR-01/CR-02
+두 결함이 06-08/06-09/06-10 세 gap-closure 플랜으로 실제 코드 수준에서 닫혔는지 코드를 직접
+읽고 회귀 테스트를 재실행해 독립적으로 재확인했다. **두 결함 모두 실제로 닫혔다** — SUMMARY의
+"닫혔다" 선언이 아니라 (1) 타입 수준 봉인/구조적 데이터 흐름 차단, (2) 그 봉인을 정확히
+겨냥한 행동 회귀 테스트, (3) 소비 지점(LoginPanel.tsx/emitTokenValidationFailure)의 직접
+코드 읽기, 세 겹의 독립 증거로 확인했다.
 
-1. **CR-01 (SC2에 직결):** 고지 모달의 "확인했습니다" 흐름은 `settings:set-login-mode`
-   쓰기가 실제로 실패하는 경우 그 실패를 감지하지 못하고 모달을 "성공"으로 닫는다.
-   `App.tsx`의 `handleSetLoginMode`가 탭 클릭(fire-and-forget)용으로 설계된 "실패를
-   삼키고 절대 재던지지 않는" 구현을 모달 확인 경로에 그대로 재사용하면서 발생한
-   계약 불일치다. 정상 경로(디스크 쓰기 성공)에서는 문제가 없다. 렌더러 컴포넌트
-   테스트가 전무해 이 결함은 어떤 자동 테스트로도 잡히지 않는다.
-2. **CR-02 (R010/마스킹 원칙에 직결, SC3의 credentialLogin 6개 신호 자체는 손상 안 됨):**
-   두 로그인 모드가 공유하는 `validateToken()`의 네 개 실패 emit 지점이 서버 응답
-   원문 최대 200자를 마스킹 없이 그대로 렌더러에 전달한다. 06-05-SUMMARY.md는 이
-   경로가 "자동으로 마스킹 혜택을 받는다"고 명시적으로(그리고 틀리게) 기록했다 —
-   이는 검증되지 않은 채 통과 처리된 완전성 주장이었다. phase 06 이전부터 있던
-   코드라 06-05가 직접 도입한 결함은 아니지만, 이 phase가 "buildFailureResult()가
-   유일한 마스킹 관문"이라는 전제를 세우면서 그 전제가 성립하지 않는 공유 경로를
-   그대로 남겨뒀다.
+06-REVIEW-GAPS.md가 이번 라운드에서 새로 발견한 4건(Critical 0, Warning 1(WR-05), Info 3)은
+어느 것도 must-have를 재손상시키지 않는다 — WR-05는 과잉 마스킹(관측성) 방향의 리스크이지
+과소 마스킹(노출) 방향이 아니며, Info 3건은 문서/로그 형식 관찰이다.
 
-두 결함 모두 `overrides:`로 수용할 만한 "의도된 편차"가 아니라 명백한 구현 결함이며,
-D-03(무인 자동 로그인 제거)처럼 ROADMAP에 문서화된 의도적 편차와는 성격이 다르다.
-VERIFICATION.md 프론트매터에 override 항목을 추가하지 않았다.
-
-이 phase의 나머지 산출물 — 방식 선택 영속, env 잠금, D-02 코드 삭제, 6개 실패 신호의
-credentialLogin 경로 매핑·마스킹, UI-SPEC 22개 항목 중 코드로 확인 가능한 대부분 —
-은 코드 직접 확인 결과 견고했다.
+`gaps: []`(코드 수준 gap 없음)이지만, 이 phase의 완료 판정에는 여전히 4개의 outstanding UAT +
+2개의 human_judgment 항목이 남아 있다 — 이들은 이번 라운드가 새로 만든 것이 아니라
+06-VALIDATION.md/06-06-SUMMARY.md에 이미 등록된 항목이며, 이번 재검증은 그것을 임의로
+해소된 것으로 선언하지 않는다. 따라서 `status: human_needed`로 판정하며, 다음 단계는 이
+4+2개 항목에 대한 실제 Electron 세션 기반 사람 확인이다.
 
 ---
 
-_Verified: 2026-08-26T06:15:20Z_
+_Verified: 2026-08-26T08:12:12Z_
 _Verifier: Claude (gsd-verifier)_
+_이 보고서는 이전 06-VERIFICATION.md(2026-08-26T06:15:20Z, gaps_found, 5/7)를 대체한다. 이전
+보고서의 gap 구조는 위 frontmatter `re_verification.gaps_closed`에 보존했다._
