@@ -9,6 +9,10 @@ import {
   classifyCredentialLoginSignal,
   type LoginFailureReason,
 } from "../../shared/login-failure";
+import {
+  describeTokenValidationFailure,
+  type TokenValidationFailureKind,
+} from "../../shared/token-validation-failure";
 import { logService } from "./log-service";
 import { ApiAuthClient, ApiAuthError } from "./api-auth-client";
 import {
@@ -952,18 +956,13 @@ export class AuthService extends EventEmitter {
         return this.getStatus();
       }
 
-      this._emit({
-        type: "token-expired",
-        message: `401 응답 — ${rawBody.slice(0, 200)}`,
-        timestamp: Date.now(),
-      });
+      this.emitTokenValidationFailure("unauthorized", "token-expired");
       return { isLoggedIn: false };
     }
 
     if (!res.ok) {
-      const msg = `GET /fans/me ${res.status}: ${res.statusText} — ${rawBody.slice(0, 200)}`;
-      logService.error("AuthService", msg);
-      this._emit({ type: "login-failed", message: msg, timestamp: Date.now() });
+      logService.error("AuthService", `GET /fans/me ${res.status}: ${res.statusText}`);
+      this.emitTokenValidationFailure("http-error", "login-failed", { status: res.status });
       return { isLoggedIn: false };
     }
 
@@ -971,20 +970,12 @@ export class AuthService extends EventEmitter {
     try {
       body = JSON.parse(rawBody) as FansMe;
     } catch {
-      this._emit({
-        type: "login-failed",
-        message: `GET /fans/me 응답 JSON 파싱 실패: ${rawBody.slice(0, 200)}`,
-        timestamp: Date.now(),
-      });
+      this.emitTokenValidationFailure("parse-error", "login-failed");
       return { isLoggedIn: false };
     }
 
     if (!body.fanId) {
-      this._emit({
-        type: "login-failed",
-        message: `GET /fans/me 응답에 fanId 없음: ${rawBody.slice(0, 200)}`,
-        timestamp: Date.now(),
-      });
+      this.emitTokenValidationFailure("missing-fan-id", "login-failed");
       return { isLoggedIn: false };
     }
 
@@ -1001,6 +992,32 @@ export class AuthService extends EventEmitter {
       fanId: body.fanId,
       tokenPreview: maskToken(this.cachedToken),
     };
+  }
+
+  /**
+   * `validateToken()`의 네 실패 지점이 공유하는 단일 emit 관문(06-VERIFICATION.md gap 2,
+   * CR-02 처치). `describeTokenValidationFailure()`가 반환한 확정 문구만 렌더러로 나간다 —
+   * 이 메서드의 `context`는 서버 응답 텍스트를 담을 수 있는 필드가 없으므로 원문이 이
+   * 경로로 들어올 타입 경로 자체가 없다.
+   *
+   * 식별자가 있으면 `buildLadderFailureEvent()`가 이미 쓰는 것과 동일한 병기 관용구
+   * (`"{message} (식별자: {identifier})"`)로 문장 뒤에 붙인다 — 비동기 이벤트 경로에는
+   * 구조화된 필드를 실을 자리가 없다는 같은 이유다. 최종 문자열을 `maskSensitive()`에
+   * 통과시킨 뒤 `_emit()`한다 — 이 값은 우리가 만든 확정 문구뿐이라 마스킹이 실제로
+   * 바꿀 것은 없지만, "렌더러로 나가는 문구는 전부 마스킹 관문을 통과한다"는 전제를
+   * 이 경로에서도 참으로 만들기 위해서다(06-05가 세웠다가 이 경로에서 깨졌던 전제).
+   */
+  private emitTokenValidationFailure(
+    kind: TokenValidationFailureKind,
+    eventType: "token-expired" | "login-failed",
+    context?: { status?: number },
+  ): void {
+    const guidance = describeTokenValidationFailure(kind, context);
+    const message =
+      guidance.identifier !== undefined
+        ? `${guidance.message} (식별자: ${guidance.identifier})`
+        : guidance.message;
+    this._emit({ type: eventType, message: maskSensitive(message), timestamp: Date.now() });
   }
 
   /**
