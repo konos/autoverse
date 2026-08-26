@@ -1,7 +1,13 @@
 import { useState } from "react";
-import type { AuthStatus, LoginMode } from "../../shared/types";
+import type { AuthStatus, LoginMode, CredentialLoginResult } from "../../shared/types";
 import ApiModeNoticeModal from "./ApiModeNoticeModal";
-import { resolveTabView, describeLockedMode, shouldShowInlineNotice, decideTabClick } from "./login-panel-view";
+import {
+  resolveTabView,
+  describeLockedMode,
+  shouldShowInlineNotice,
+  decideTabClick,
+  buildFailureView,
+} from "./login-panel-view";
 
 interface LoginPanelProps {
   status: AuthStatus;
@@ -56,7 +62,8 @@ export default function LoginPanel({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [credLoading, setCredLoading] = useState(false);
-  const [credMessage, setCredMessage] = useState<string | null>(null);
+  const [credResult, setCredResult] = useState<CredentialLoginResult | null>(null);
+  const failureView = buildFailureView(credResult);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeSaving, setNoticeSaving] = useState(false);
   const [noticeSaveError, setNoticeSaveError] = useState<string | null>(null);
@@ -107,14 +114,17 @@ export default function LoginPanel({
   const handleCredentialLogin = async () => {
     if (!email || !password) return;
     setCredLoading(true);
-    setCredMessage(null);
+    setCredResult(null);
     try {
       const result = await window.api.auth.credentialLogin(email, password);
       if (!result.success) {
-        setCredMessage(result.message ?? "로그인 실패");
+        setCredResult(result);
       }
-    } catch (err) {
-      setCredMessage(err instanceof Error ? err.message : "로그인 오류");
+    } catch {
+      // IPC-level exception (not a mapped LoginFailureReason from main) —
+      // route through the same network-error copy as D-14's fallback bucket
+      // instead of surfacing a raw, unmapped exception string.
+      setCredResult({ success: false, reason: "network-error" });
     } finally {
       setCredLoading(false);
     }
@@ -268,8 +278,15 @@ export default function LoginPanel({
                   onKeyDown={(e) => { if (e.key === "Enter") handleCredentialLogin(); }}
                 />
               </div>
-              {credMessage && (
-                <p className="error-message" role="alert">{credMessage}</p>
+              {failureView.visible && (
+                <p className="error-message" role="alert">
+                  {failureView.message}
+                  {failureView.identifier !== undefined && (
+                    <code className="token-preview" style={{ marginLeft: "0.35rem" }}>
+                      (식별자: {failureView.identifier})
+                    </code>
+                  )}
+                </p>
               )}
               <div className="button-row">
                 <button
@@ -280,6 +297,15 @@ export default function LoginPanel({
                 >
                   {credLoading ? "로그인 중..." : "로그인"}
                 </button>
+                {failureView.visible && failureView.showBrowserSwitch && (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handleTabClick("browser")}
+                    disabled={tabsDisabled}
+                  >
+                    브라우저 로그인으로 전환
+                  </button>
+                )}
               </div>
             </>
           )}

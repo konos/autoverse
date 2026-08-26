@@ -69,9 +69,9 @@ are part of the phase gate, not optional.
 | 06-04 T2 | 06-04 | 2 | R016 | T-06-13 | disproven-contract methods removed; remaining ApiAuthClient tests only call live methods | unit | `npx vitest run src/main/services/__tests__/api-auth-client.test.ts` | W0 (repair) | ⬜ pending |
 | 06-05 T1 | 06-05 | 3 | R020 | T-06-21 | raw DOM signal -> reason mapping incl. `null` (broken selector) and unknown strings -> unmapped fallback | unit | `npx vitest run src/shared/__tests__/login-failure.test.ts` | W0 (extend) | ✅ green |
 | 06-05 T3 | 06-05 | 3 | R020 | T-06-17 / R010 | identifier and message returned to the renderer pass `maskSensitive()` - no raw token/query-string leak | unit | `npx vitest run src/main/services/__tests__/auth-service.test.ts` | W0 (extend) | ✅ green |
-| 06-06 T2 | 06-06 | 4 | R021 | T-06-22 | tab-click decision: first API selection opens the notice and does NOT persist; locked state does nothing | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ⬜ pending |
-| 06-06 T2 | 06-06 | 4 | R016 | T-06-23 | locked badge detail names the applied mode label, never the raw env value | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ⬜ pending |
-| 06-06 T3 | 06-06 | 4 | R020 | T-06-24 | failure view: browser-switch button only for the reasons that ask for it; no chip when identifier is absent | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ⬜ pending |
+| 06-06 T2 | 06-06 | 4 | R021 | T-06-22 | tab-click decision: first API selection opens the notice and does NOT persist; locked state does nothing | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ✅ green |
+| 06-06 T2 | 06-06 | 4 | R016 | T-06-23 | locked badge detail names the applied mode label, never the raw env value | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ✅ green |
+| 06-06 T3 | 06-06 | 4 | R020 | T-06-24 | failure view: browser-switch button only for the reasons that ask for it; no chip when identifier is absent | unit | `npx vitest run src/renderer/components/__tests__/login-panel-view.test.ts` | W0 (new) | ✅ green |
 | 06-07 T1 | 06-07 | 5 | R016/R020/R021 | T-06-13 | phase gate - full suite + both typechecks green (D-02 deletions surface as type errors first) | gate | `npm test && npm run typecheck:main && npm run typecheck` | existing | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*

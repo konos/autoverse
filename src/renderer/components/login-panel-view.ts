@@ -11,6 +11,7 @@
  */
 import type { LoginMode, CredentialLoginResult } from "../../shared/types";
 import { API_MODE_NOTICE_VERSION, shouldShowApiModeNotice } from "../../shared/api-mode-notice";
+import { mapLoginFailure } from "../../shared/login-failure";
 
 export interface TabView {
   active: LoginMode;
@@ -88,10 +89,40 @@ export interface FailureView {
   showBrowserSwitch: boolean;
 }
 
+const NO_FAILURE: FailureView = {
+  visible: false,
+  message: "",
+  showBrowserSwitch: false,
+};
+
 /**
- * 자격증명 로그인 결과를 오류 슬롯 렌더링용으로 정리한다.
- * (RED phase placeholder — Task 3 GREEN commit fills this in.)
+ * 자격증명 로그인 결과를 오류 슬롯 렌더링에 필요한 형태로 정리한다(D-15).
+ *
+ * 문구는 main이 이미 매핑·마스킹해서 `message`에 실어 보내므로 여기서 다시
+ * 만들지 않는다 — `reason`만 `mapLoginFailure()`에 넣어 `suggestBrowserSwitch`만
+ * 가져온다(문구를 되파싱하지 않기 위해 `reason`을 계약에 넣었다).
+ *
+ * `identifier`가 없으면 반환 객체에 그 필드 자체를 담지 않는다 — 렌더러가
+ * `(식별자: undefined)`를 찍는 사고를 구조적으로 막는다. 매 호출이 완전히
+ * 새로운 객체를 반환하므로 이전 호출의 결과가 누적될 여지가 없다.
  */
-export function buildFailureView(_result: CredentialLoginResult | null): FailureView {
-  throw new Error("not implemented");
+export function buildFailureView(result: CredentialLoginResult | null): FailureView {
+  if (result === null || result.success) {
+    return NO_FAILURE;
+  }
+
+  const reason = result.reason ?? "unknown";
+  const guidance = mapLoginFailure(reason, result.identifier);
+
+  const view: FailureView = {
+    visible: true,
+    message: result.message ?? guidance.message,
+    showBrowserSwitch: guidance.suggestBrowserSwitch,
+  };
+
+  if (result.identifier !== undefined) {
+    view.identifier = result.identifier;
+  }
+
+  return view;
 }
