@@ -72,13 +72,13 @@
   2. 사용자가 API 모드를 처음 선택하면 "매 로그인마다 이메일 OTP 필요, 자동 재로그인 불가"라는 안내를 확인해야만 진행할 수 있다.
   3. API 로그인이 실패하면 -25003/-25044/-26000/-26004/해외 로그인 차단 등 서버 에러 코드 대신 사용자가 이해할 수 있는 한국어 설명 문구가 표시된다.
 
-**Plans**: 7 plans (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계)
+**Plans**: 2/7 plans executed (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계)
 **UI hint**: yes
 
 **Wave 1** *(병렬 3개 — 파일 겹침 없음)*
 
 - [x] 06-01-PLAN.md — [wave 1] **트레이서**: 로그인 방식 선택 영속 종단 슬라이스(settings.json → settings:* IPC → 탭) + 고지 확인 상태 영속 + 저장 실패 롤백 (D-04/D-05/D-06/D-07/D-10)
-- [ ] 06-02-PLAN.md — [wave 1] 실패 신호 → 한국어 안내 순수 매핑 `src/shared/login-failure.ts` (D-12/D-13/D-14, R020)
+- [x] 06-02-PLAN.md — [wave 1] 실패 신호 → 한국어 안내 순수 매핑 `src/shared/login-failure.ts` (D-12/D-13/D-14, R020)
 - [ ] 06-03-PLAN.md — [wave 1] 반증된 문서 서술 정정: REQUIREMENTS R020/R021 · ROADMAP 성공 기준 VOID 마킹 + 정정문 (D-11)
 
 **Wave 2** *(06-01·06-02 완료 후)*
@@ -121,5 +121,5 @@ Phases execute in numeric order: 05 → 06 → 07
 | 03. s03 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 04. s04 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 05. API 로그인 핵심 흐름 + 토큰 교환 검증 | v0.3.0 | 3/3 | Complete    | 2026-08-25 |
-| 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 0/7 | Not started | - |
+| 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 2/7 | In Progress|  |
 | 07. API 자격 증명 저장 + 토큰 만료 사전 경고 | v0.3.0 | 0/TBD | Not started | - |

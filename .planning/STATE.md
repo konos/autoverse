@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-08-26T04:00:36.874Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-08-26T04:07:11.942Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: 98bf6f588fea63af2832479f50c33eba368d3689
+state_head: 9f95938d4b60f9eb7eeca81e37b2dd8fdacef78f
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 10
-  completed_plans: 4
+  completed_plans: 5
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 ## Current Position
 
 Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 06 execution started
 
@@ -76,6 +76,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 05-api P02 | 20 min | 2 tasks | 3 files |
 | Phase 05-api P03 | ~20min | 3 tasks | 2 files |
 | Phase 06-ui P01 | 45min | 3 tasks | 11 files |
+| Phase 06 P02 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Recent decisions affecting current work:
 - [Phase 05]: ApplyEngine 의 사다리 토큰 수용은 실제 신청 없이 shape 수준 근거로 사인오프 — 라이브 FIFO 이벤트에 대한 되돌릴 수 없는 행위라 검증 비용이 리스크를 초과. 잔여 리스크는 D-04 로 인수 (05-UAT.md test 5)
 - [Phase 06]: R016: 로그인 방식 영속 설정을 1차 소스로 승격, env는 개발용 덮어쓰기로 강등 — add-alongside 시 사용자가 고른 값과 실제 동작이 말없이 어긋나는 상황을 방지하기 위함
 - [Phase 06]: 설정 저장 실패 시 낙관적 갱신+롤백 대신 성공 후에만 상태 갱신하는 편도 방식 채택 — 탭 활성 표시가 props.loginMode에서만 파생되므로 별도 되돌리기 로직이 필요 없음(UI-SPEC E1 error)
+- [Phase 06]: R020: mapLoginFailure() 순수 함수로 6개 실패 사유를 UI-SPEC 확정 문구로 고정 — 캡차 오진(D-13) 재발 방지 — 실패 안내가 auth-service 곳곳의 if로 흩어지면 새 사유 추가 시 누락되므로, exhaustive switch로 컴파일 타임 안전망을 걸었다
+- [Phase 06]: identifier/logDetail 마스킹은 이 모듈이 하지 않고 호출부(06-05) 책임으로 명시 — 렌더러로 반환되는 필드는 로그 자동 마스킹 경로를 타지 않아, 계약을 파일 주석·prohibitions·06-05 태스크 3중으로 고정했다 (T-06-06, R010)
 
 ### Pending Todos
 
@@ -117,6 +120,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T04:00:36.802Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-08-26T04:07:02.604Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
