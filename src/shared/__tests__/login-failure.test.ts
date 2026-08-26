@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   mapLoginFailure,
   truncateFormError,
+  classifyCredentialLoginSignal,
   FORM_ERROR_MAX_LENGTH,
   type LoginFailureReason,
 } from "../login-failure";
@@ -115,6 +116,48 @@ describe("truncateFormError", () => {
   it("빈 문자열/공백만 있는 입력은 빈 결과를 반환한다", () => {
     expect(truncateFormError("")).toBe("");
     expect(truncateFormError("   ")).toBe("");
+  });
+});
+
+describe("classifyCredentialLoginSignal", () => {
+  it("'captcha' 신호 → reason 'captcha' (D-13 오분류 수정)", () => {
+    expect(classifyCredentialLoginSignal("captcha")).toEqual({ reason: "captcha" });
+  });
+
+  it("'otp-form' 신호 → reason 'unknown' + detail (도달 불가에 가까운 신호를 미매핑 폴백으로 라우팅)", () => {
+    const result = classifyCredentialLoginSignal("otp-form");
+    expect(result.reason).toBe("unknown");
+    expect(result.detail).toBe("otp-form");
+  });
+
+  it("'error:<본문>' 신호 → reason 'form-error' + detail 분리", () => {
+    expect(classifyCredentialLoginSignal("error:비밀번호가 올바르지 않습니다.")).toEqual({
+      reason: "form-error",
+      detail: "비밀번호가 올바르지 않습니다.",
+    });
+  });
+
+  it("'timeout' 신호 → reason 'timeout'", () => {
+    expect(classifyCredentialLoginSignal("timeout")).toEqual({ reason: "timeout" });
+  });
+
+  it("null (셀렉터가 아무것도 못 찾음) → reason 'unknown', detail 없음", () => {
+    expect(classifyCredentialLoginSignal(null)).toEqual({ reason: "unknown" });
+  });
+
+  it("완전히 새로운 문자열 → reason 'unknown' + detail 에 원문 보존", () => {
+    expect(classifyCredentialLoginSignal("완전히 새로운 문자열")).toEqual({
+      reason: "unknown",
+      detail: "완전히 새로운 문자열",
+    });
+  });
+
+  it("'error:' (본문 없음) → reason 'unknown' — 빈 폼 오류를 폼 오류로 취급하지 않는다", () => {
+    expect(classifyCredentialLoginSignal("error:")).toEqual({ reason: "unknown" });
+  });
+
+  it("'error:   ' (공백만 있는 본문) → reason 'unknown'", () => {
+    expect(classifyCredentialLoginSignal("error:   ")).toEqual({ reason: "unknown" });
   });
 });
 
