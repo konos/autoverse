@@ -77,7 +77,7 @@
 
 **Wave 1** *(병렬 3개 — 파일 겹침 없음)*
 
-- [ ] 06-01-PLAN.md — [wave 1] **트레이서**: 로그인 방식 선택 영속 종단 슬라이스(settings.json → settings:* IPC → 탭) + 고지 확인 상태 영속 + 저장 실패 롤백 (D-04/D-05/D-06/D-07/D-10)
+- [x] 06-01-PLAN.md — [wave 1] **트레이서**: 로그인 방식 선택 영속 종단 슬라이스(settings.json → settings:* IPC → 탭) + 고지 확인 상태 영속 + 저장 실패 롤백 (D-04/D-05/D-06/D-07/D-10)
 - [ ] 06-02-PLAN.md — [wave 1] 실패 신호 → 한국어 안내 순수 매핑 `src/shared/login-failure.ts` (D-12/D-13/D-14, R020)
 - [ ] 06-03-PLAN.md — [wave 1] 반증된 문서 서술 정정: REQUIREMENTS R020/R021 · ROADMAP 성공 기준 VOID 마킹 + 정정문 (D-11)
 

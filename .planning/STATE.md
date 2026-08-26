@@ -5,17 +5,17 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: executing
-stopped_at: Phase 06 UI-SPEC approved
-last_updated: "2026-08-25T18:23:34.342Z"
-last_activity: 2026-08-25
-last_activity_desc: Phase 05 complete, transitioned to Phase 06
-state_head: e04bd0a1342924dd18b311a5697b306db85015c3
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-08-26T04:00:36.874Z"
+last_activity: 2026-08-26
+last_activity_desc: Phase 06 execution started
+state_head: 98bf6f588fea63af2832479f50c33eba368d3689
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 10
-  completed_plans: 3
-  percent: 30
+  completed_plans: 4
+  percent: 33
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 ## Current Position
 
-Phase: 06 (로그인 방식 선택 UI + 실패 안내) — READY TO EXECUTE
-Plan: Not started
+Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-08-25 — Phase 05 complete, transitioned to Phase 06
+Last activity: 2026-08-26 — Phase 06 execution started
 
 **Phase 05 결과 (완료 2026-08-25):** R019 사다리는 **rung1(직접 사용)이 실계정에서 성립**함을 1회 관측으로 확인했다 (계정 도메인 쿠키 JWT → `/fans/me` 200 + fanId). rung2(명시적 교환)는 미실행으로 여전히 미검증이다. 로그인 방식 최종 결정(D-04)은 Phase 06 에서 이 결과를 근거로 내린다.
 
@@ -44,7 +44,7 @@ Last activity: 2026-08-25 — Phase 05 complete, transitioned to Phase 06
 구 05-01(halted)/05-02(blocked) 플랜은 폐기·대체됐다. 정본 근거: `.planning/phases/05-api/05-01-SUMMARY.md`,
 결정 사항: `.planning/phases/05-api/05-CONTEXT.md`
 
-Progress: [██████░░░░░░░░░░░░░░] 1/3 phases · 3/3 plans (Phase 05 완료)
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Progress: [██████░░░░░░░░░░░░░░] 1/3 pha
 | Phase 05-api P01 | ~35min | 3 tasks | 6 files |
 | Phase 05-api P02 | 20 min | 2 tasks | 3 files |
 | Phase 05-api P03 | ~20min | 3 tasks | 2 files |
+| Phase 06-ui P01 | 45min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,8 @@ Recent decisions affecting current work:
 - [Phase 05]: R019 실계정 관측으로 validated — rung1(직접 사용)이 계정 도메인 쿠키(rt, JWT 451자)로 /fans/me 200+fanId 확보. rung2(교환)는 미실행으로 여전히 미검증
 - [Phase 05]: credentialLogin 리다이렉트 URL 로그의 토큰 평문 유출(T-05-17) — **Phase 05 내에서 해소됨** (커밋 `186042f`). `mask.ts` 에 snake_case URL 쿼리 파라미터 룰 추가, 회귀 테스트 5건. Phase 06/07 이관 불필요
 - [Phase 05]: ApplyEngine 의 사다리 토큰 수용은 실제 신청 없이 shape 수준 근거로 사인오프 — 라이브 FIFO 이벤트에 대한 되돌릴 수 없는 행위라 검증 비용이 리스크를 초과. 잔여 리스크는 D-04 로 인수 (05-UAT.md test 5)
+- [Phase 06]: R016: 로그인 방식 영속 설정을 1차 소스로 승격, env는 개발용 덮어쓰기로 강등 — add-alongside 시 사용자가 고른 값과 실제 동작이 말없이 어긋나는 상황을 방지하기 위함
+- [Phase 06]: 설정 저장 실패 시 낙관적 갱신+롤백 대신 성공 후에만 상태 갱신하는 편도 방식 채택 — 탭 활성 표시가 props.loginMode에서만 파생되므로 별도 되돌리기 로직이 필요 없음(UI-SPEC E1 error)
 
 ### Pending Todos
 
@@ -114,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-25T17:12:18.250Z
-Stopped at: Phase 06 UI-SPEC approved
-Resume file: .planning/phases/06-ui/06-UI-SPEC.md
+Last session: 2026-08-26T04:00:36.802Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
