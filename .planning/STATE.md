@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: executing
-stopped_at: Completed 06-05-PLAN.md
-last_updated: "2026-08-26T05:34:25.172Z"
+stopped_at: Completed 06-06-PLAN.md
+last_updated: "2026-08-26T05:50:37.772Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: 1b21c0b48bf6a0cc0480bd72e13b0b89228ff0b2
+state_head: febd91a242af4a8005e6d2eda32db5aa654f91e3
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 ## Current Position
 
 Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 06 execution started
 
@@ -80,6 +80,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06-ui P03 | 12min | 2 tasks | 2 files |
 | Phase 06 P04 | 42min | 3 tasks | 7 files |
 | Phase 06 P05 | 25min | 3 tasks | 5 files |
+| Phase 06 P06 | 11 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ Recent decisions affecting current work:
 - [Phase 06]: D-03: tryAutoLogin()/tryAutoRelogin() 게이트를 모드 조건에서 외부 로그인 요청 발생 조건으로 재정의, tryAutoRelogin()을 trySessionRestore()로 개명 — 브라우저 모드에도 무인 로그인 차단 확대(로드맵 SC1 의도적 편차)
 - [Phase 06]: [Phase 06] classifyCredentialLoginSignal()로 캡차→OTP 오진(D-13) 수정 — DOM 신호 분류를 auth-service.ts 곳곳의 if 대신 단일 순수 함수로 고정
 - [Phase 06]: [Phase 06] buildFailureResult()를 R010 마스킹의 단일 관문으로 신설 — CredentialLoginResult.identifier 필드 추가, 사다리 실패는 buildLadderFailureEvent()로 login-failed 이벤트 발행
+- [Phase 06]: [Phase 06] 네이티브 <dialog>.showModal() 기반 차단형 고지 모달 신설 — 이 저장소 최초의 모달 컴포넌트, 확인/취소 경로를 물리적으로 분리해 Esc가 확인으로 오인되지 않게 함 — R021의 '확인해야만 진행' 요건은 비차단 표시로는 구조적으로 성립하지 않는다
+- [Phase 06]: [Phase 06] login-panel-view.ts — LoginPanel 판단 로직 5개 순수 함수를 실제 모듈로 만들고 테스트가 이를 직접 import — 기존 복제본 테스트 관례에서 의도적으로 벗어남 — 복제본이 아니라 배포되는 코드를 검증하기 위함
 
 ### Pending Todos
 
@@ -128,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T05:34:25.107Z
-Stopped at: Completed 06-05-PLAN.md
+Last session: 2026-08-26T05:50:37.715Z
+Stopped at: Completed 06-06-PLAN.md
 Resume file: None
