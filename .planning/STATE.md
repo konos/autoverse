@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 06
 current_phase_name: 로그인 방식 선택 UI + 실패 안내
 status: executing
-stopped_at: Completed 06-07-PLAN.md
-last_updated: "2026-08-26T06:55:46.189Z"
+stopped_at: Completed 06-08-PLAN.md
+last_updated: "2026-08-26T07:33:27.826Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 06 execution started
-state_head: 428a9b0c93948243122dc4c2a41d9ea0cf2a5a9c
+state_head: 84a5de5707c8b38c57aa78dc8a7753195644e6e0
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 33
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-08-25)
 
 ## Current Position
 
-Phase: 06 (로그인 방식 선택 UI + 실패 안내) — READY TO EXECUTE
-Plan: 7 of 7
+Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
+Plan: 2 of 10
 Status: Ready to execute
 Last activity: 2026-08-26 — Phase 06 execution started
 
@@ -82,6 +82,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06 P05 | 25min | 3 tasks | 5 files |
 | Phase 06 P06 | 11 min | 3 tasks | 7 files |
 | Phase 06 P07 | 12min | 2 tasks | 1 files |
+| Phase 06-ui P08 | 15min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,8 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06] login-panel-view.ts — LoginPanel 판단 로직 5개 순수 함수를 실제 모듈로 만들고 테스트가 이를 직접 import — 기존 복제본 테스트 관례에서 의도적으로 벗어남 — 복제본이 아니라 배포되는 코드를 검증하기 위함
 - [Phase 06]: [Phase 06] phase 게이트(vitest 315/315 + typecheck×2 + build) green 확인, 06-VALIDATION.md 실제 상태로 갱신 완료
 - [Phase 06]: [Phase 06] 수동 UAT 4항목(R016/R020/R021) 중 선택 영속(양방향)만 부분 확인 — API→재시작 방향은 06-01 tracer로 확인됨, 나머지(반대 방향·최초 고지 차단·환경변수 잠금·실패 안내)는 사용자 UAT 대기
+- [Phase 06-ui]: [Phase 06 P08] CR-01 gap closure: 검증자 제안(strict setter 병렬 추가) 대신 모달 경로에서 로그인 방식 저장 함수 prop 자체를 제거 — createLoginModeActions()가 확인 흐름 전체(확인 저장→모드 저장→성패 판정)를 소유하고 LoginPanel은 반환값(AcknowledgeOutcome)만으로 분기, 재발 형태를 타입 수준에서 차단
+- [Phase 06-ui]: [Phase 06 P08] WR-01(저장 중 Esc 경합)을 gap 1과 같은 플랜에서 함께 해소 — decideNoticeCancel(saving) 순수 함수로 Cancel 버튼과 네이티브 Esc를 단일 판단 지점에 통합. IN-03은 onDiagnostic JSDoc 문서화로만, IN-04는 06-VALIDATION.md Manual-Only #2 UAT로 이관(DEFER)
 
 ### Pending Todos
 
@@ -134,6 +137,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T05:58:16.739Z
-Stopped at: Completed 06-07-PLAN.md
+Last session: 2026-08-26T07:33:27.759Z
+Stopped at: Completed 06-08-PLAN.md
 Resume file: None
