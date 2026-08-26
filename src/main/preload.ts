@@ -17,8 +17,6 @@ const api: IpcApi = {
     openLogin: () => ipcRenderer.invoke("auth:open-login"),
     credentialLogin: (email: string, password: string): Promise<CredentialLoginResult> =>
       ipcRenderer.invoke("auth:credential-login", email, password),
-    submitOtp: (otpCode: string): Promise<CredentialLoginResult> =>
-      ipcRenderer.invoke("auth:submit-otp", otpCode),
     validateToken: () => ipcRenderer.invoke("auth:validate-token"),
     logout: (clearCredentials?: boolean) =>
       ipcRenderer.invoke("auth:logout", clearCredentials),

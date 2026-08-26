@@ -1,3 +1,5 @@
+import type { LoginFailureReason } from "./login-failure";
+
 // ── Log types ─────────────────────────────────────────────────────────────────
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -270,8 +272,8 @@ export interface AuthEvent {
 
 export interface CredentialLoginResult {
   success: boolean;
-  needOtp?: boolean;
   message?: string;
+  reason?: LoginFailureReason;
 }
 
 export interface IpcApi {
@@ -279,7 +281,6 @@ export interface IpcApi {
     getStatus: () => Promise<AuthStatus>;
     openLogin: () => Promise<void>;
     credentialLogin: (email: string, password: string) => Promise<CredentialLoginResult>;
-    submitOtp: (otpCode: string) => Promise<CredentialLoginResult>;
     validateToken: () => Promise<AuthStatus>;
     logout: (clearCredentials?: boolean) => Promise<void>;
     tryAutoLogin: () => Promise<boolean>;

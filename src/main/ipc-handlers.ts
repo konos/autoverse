@@ -5,7 +5,6 @@ import { profileStore } from "./services/profile-store";
 import { settingsStore } from "./services/settings-store";
 import { applyEngine } from "./services/apply-engine";
 import { logService } from "./services/log-service";
-import { resolveLoginMode } from "./login-mode";
 import type { AuthEvent, ApplyEvent, Profile, LogEntry, LoginMode } from "../shared/types";
 
 let mainWindowRef: BrowserWindow | null = null;
@@ -47,18 +46,11 @@ export function registerIpcHandlers(): void {
     await authService.login(mainWindowRef);
   });
 
-  // auth:credential-login — email/password login (mode-dependent: API vs headless browser)
+  // auth:credential-login — email/password login. D-01: API 모드의 실체가
+  // credentialLogin() 헤드리스 자동입력 경로 그 자체이므로, 모드 분기는 없다 —
+  // 이 한 줄이 API 모드의 유일한 진입점이다.
   ipcMain.handle("auth:credential-login", async (_evt, email: string, password: string) =>
-    resolveLoginMode() === "api"
-      ? authService.credentialLoginApi(email, password)
-      : authService.credentialLogin(email, password)
-  );
-
-  // auth:submit-otp — submit OTP code for credential login (mode-dependent)
-  ipcMain.handle("auth:submit-otp", async (_evt, otpCode: string) =>
-    resolveLoginMode() === "api"
-      ? authService.submitOtpApi(otpCode)
-      : authService.submitOtp(otpCode)
+    authService.credentialLogin(email, password)
   );
 
   // auth:validate-token — calls GET /fans/me
@@ -157,7 +149,6 @@ export function unregisterIpcHandlers(): void {
   ipcMain.removeHandler("auth:status");
   ipcMain.removeHandler("auth:open-login");
   ipcMain.removeHandler("auth:credential-login");
-  ipcMain.removeHandler("auth:submit-otp");
   ipcMain.removeHandler("auth:validate-token");
   ipcMain.removeHandler("auth:logout");
   ipcMain.removeHandler("auth:auto-login");
