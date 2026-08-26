@@ -532,6 +532,7 @@ interface PrivateFailureBuilders {
     rawSignal: string | null,
     overrideReason?: LoginFailureReason,
     overrideDetail?: string,
+    overrideMessage?: string,
   ): CredentialLoginResult;
   buildLadderFailureEvent(detail: string): AuthEvent;
 }
@@ -622,6 +623,84 @@ describe("AuthService.buildFailureResult — DOM 신호 분류 + 마스킹 관�
 
     expect(result.message).toContain("서비스 이용에 필요한 토큰");
     expect(result.identifier).toBe("ApiAuthError: rung1");
+  });
+
+  // ── overrideMessage (Task 2, WR-03) ──────────────────────────────────────
+  // btnEnabled 실패 분기가 마스킹 관문을 우회하던 7번째 미분류 경로였다. 이
+  // 관문에 태우면서도 확정된 사용자 문구를 후퇴시키지 않기 위한 4번째 선택
+  // 파라미터를 검증한다.
+
+  it("overrideMessage 를 넘기면 반환된 message 가 그 문구와 같고 reason 이 채워진다 (WR-03 Test 1)", () => {
+    const service = new AuthService();
+    const fixedMessage = "로그인 버튼이 활성화되지 않았습니다. 이메일/비밀번호를 확인해주세요.";
+    const result = asFailureBuilders(service).buildFailureResult(
+      null,
+      "unknown",
+      undefined,
+      fixedMessage,
+    );
+
+    expect(result.message).toBe(fixedMessage);
+    expect(result.reason).toBe("unknown");
+  });
+
+  it("overrideMessage 에 토큰 형태 문자열이 섞여도 마스킹 관문을 지난다 — 키-값 형태와 문맥 없는 JWT 형태 둘 다 (WR-03 Test 2)", () => {
+    const service = new AuthService();
+    const keyValueToken = "a".repeat(50);
+    const contextFreeJwt =
+      "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+    const result = asFailureBuilders(service).buildFailureResult(
+      null,
+      "unknown",
+      undefined,
+      `버튼 비활성 accessToken=${keyValueToken} 원문토큰 ${contextFreeJwt} 확인해주세요`,
+    );
+
+    expect(result.message).not.toContain(keyValueToken);
+    expect(result.message).not.toContain(contextFreeJwt);
+  });
+
+  it("overrideMessage 를 넘기지 않으면 기존 6가지 사유 매핑이 완전히 동일하다 — 후방 호환 (WR-03 Test 3)", () => {
+    const service = new AuthService();
+    const result = asFailureBuilders(service).buildFailureResult("captcha");
+
+    expect(result.message).toBe(
+      "Weverse가 보안 확인을 요구해 앱 안 로그인으로는 진행할 수 없습니다. 브라우저 로그인을 사용해주세요.",
+    );
+  });
+});
+
+// ── btnEnabled 실패 소스 수준 단언 (Task 2, WR-03/IN-02) ────────────────────
+//
+// credentialLogin() 의 DOM 폴링 분기 자체는 실제 헤드리스 BrowserWindow 없이는
+// 태울 수 없다(위 buildFailureResult 계약 테스트 설명과 동일한 제약). 디버그
+// 덤프 템플릿(executeJavaScript 문자열)은 실행할 수 없으므로 소스 문자열에
+// 대한 단언으로 고정한다 — 이 저장소가 acceptance_criteria 의 grep 관용구로
+// 이미 쓰는 검증 방식을 테스트 코드 안으로 옮긴 것이다.
+describe("AuthService — btnEnabled 실패 분기 소스 수준 단언 (Task 2, WR-03/IN-02)", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "auth-service.ts"), "utf-8");
+
+  it("디버그 덤프 템플릿이 이메일 원문 필드를 담지 않는다 (IN-02)", () => {
+    expect(source).not.toContain("emailValue");
+  });
+
+  it("디버그 덤프 템플릿이 이메일 길이 필드를 담는다 — 293행 부근 emailLen 관용구를 따른다 (IN-02)", () => {
+    expect(source).toMatch(/emailLen:\s*emailInput\?\.value\?\.length\s*\?\?\s*-1/);
+  });
+
+  it("btnEnabled 실패 분기가 buildFailureResult() 를 거쳐 반환한다 (WR-03)", () => {
+    const branch = source.slice(source.indexOf("if (!btnEnabled)"), source.indexOf("if (!btnEnabled)") + 1500);
+    expect(branch).toContain("this.buildFailureResult(");
+    expect(branch).not.toMatch(/return\s*{\s*success:\s*false,\s*message:/);
+  });
+
+  it("btnEnabled 실패 분기가 형제 분기들과 동일하게 login-failed 이벤트를 발행한다 (WR-03)", () => {
+    const branch = source.slice(source.indexOf("if (!btnEnabled)"), source.indexOf("if (!btnEnabled)") + 1500);
+    expect(branch).toContain("this._emit(");
+  });
+
+  it("사용자 대면 문구가 글자 그대로 보존됐다", () => {
+    expect(source).toContain("로그인 버튼이 활성화되지 않았습니다. 이메일/비밀번호를 확인해주세요.");
   });
 });
 
