@@ -111,15 +111,19 @@ export default function App() {
 
   // D-07: mode changes never touch authStatus/step — the current session
   // (login state, token, fanId) survives a login-mode change untouched.
-  // Local state updates only after the IPC write succeeds, so a failed
-  // write leaves the previously-selected tab visibly active (Task 3 adds
-  // the failure message on top of this success-only-update ordering).
+  // Local state updates only AFTER the IPC write succeeds (never
+  // optimistically before), so a failed write leaves the previously-
+  // selected tab visibly active — there is no separate rollback step
+  // because the state was never advanced in the first place (UI-SPEC E1
+  // error).
   const handleSetLoginMode = async (mode: LoginMode) => {
     try {
       await window.api.settings.setLoginMode(mode);
       setLoginModeState(mode);
+      setLoginError(null);
     } catch (err) {
       console.error("로그인 방식 설정 저장 실패:", err);
+      setLoginError("설정 저장에 실패했습니다. 다시 시도해주세요.");
     }
   };
 

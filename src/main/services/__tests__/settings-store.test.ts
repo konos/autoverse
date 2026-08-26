@@ -214,3 +214,44 @@ describe("SettingsStore.getNoticeAck — 손상된 JSON", () => {
     cleanup(dir);
   });
 });
+
+describe("SettingsStore.setLoginMode — 쓰기 실패 (UI-SPEC E1 error)", () => {
+  it("fs.writeFileSync 가 던지면 setLoginMode() 도 그대로 던지고 디스크의 기존 값은 바뀌지 않는다", () => {
+    const { store, dir } = makeStore();
+    store.setLoginMode("api");
+
+    const writeSpy = vi.mocked(fs.writeFileSync);
+    writeSpy.mockImplementationOnce(() => {
+      throw new Error("disk full");
+    });
+    const errorSpy = vi.spyOn(logService, "error");
+
+    expect(() => store.setLoginMode("browser")).toThrow("disk full");
+
+    // Disk still holds the pre-failure value — a failed write must never
+    // leave a half-applied or default-reverted file behind.
+    const restarted = new SettingsStore();
+    expect(restarted.getLoginMode()).toBe("api");
+    expect(errorSpy).toHaveBeenCalled();
+    cleanup(dir);
+  });
+
+  it("fs.renameSync 가 던지면 setLoginMode() 가 던지고 tmp 파일을 남기지 않는다", () => {
+    const { store, dir } = makeStore();
+    store.setLoginMode("api");
+
+    const renameSpy = vi.mocked(fs.renameSync);
+    renameSpy.mockImplementationOnce(() => {
+      throw new Error("rename failed");
+    });
+
+    expect(() => store.setLoginMode("browser")).toThrow("rename failed");
+
+    const tmpPath = path.join(dir, "settings.json.tmp");
+    expect(fs.existsSync(tmpPath)).toBe(false);
+
+    const restarted = new SettingsStore();
+    expect(restarted.getLoginMode()).toBe("api");
+    cleanup(dir);
+  });
+});
