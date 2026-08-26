@@ -90,7 +90,7 @@
      폼 오류 / 타임아웃 / 네트워크·런타임 오류 / 토큰 사다리 실패 / 미매핑)를 사용자가 이해할 수
      있는 한국어 설명 문구로 표시한다.
 
-**Plans**: 7/7 plans executed (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계)
+**Plans**: 7/7 plans executed (2026-08-26 계획 — 트레이서 선행 + 웨이브 5단계) + 3 gap closure plans (06-08 ~ 06-10, 2026-08-26 계획 — 06-VERIFICATION.md gaps_found 대응)
 **UI hint**: yes
 
 **Wave 1** *(병렬 3개 — 파일 겹침 없음)*
@@ -114,6 +114,22 @@
 **Wave 5** *(전체 완료 후)*
 
 - [x] 06-07-PLAN.md — [wave 5] phase 게이트(테스트 + 타입체크 2종 + 빌드) + 자동화 불가 4항목 UAT 등록
+
+**Gap closure** *(2026-08-26 — `06-VERIFICATION.md` status: gaps_found, 5/7 truths verified. `/gsd-execute-phase 06 --gaps-only` 로 실행)*
+
+**Wave 1** *(병렬 2개 — 파일 겹침 없음)*
+
+- [ ] 06-08-PLAN.md — [wave 1] **gap 1 (CR-01)** 고지 확인 흐름이 로그인 방식 저장 실패를 감지하도록 두 경로의 실패 계약을 액션 모듈로 분리 + 렌더러 회귀 커버리지 신설 (ROADMAP SC2 정정본, D-09) · WR-01 동봉
+- [ ] 06-09-PLAN.md — [wave 1] **gap 2 (CR-02)** `validateToken()` 네 실패 emit 을 상태 코드 기반 확정 한국어 안내로 대체해 서버 응답 원문 노출 제거 + 06-05-SUMMARY.md 의 잘못된 완료 선언 [VOID] 정정 (R010, D-11/D-12/D-14)
+
+**Wave 2** *(06-09 완료 후 — `auth-service.ts` 파일 겹침)*
+
+- [ ] 06-10-PLAN.md — [wave 2] gap 2 와 뿌리를 공유하는 잔여 마스킹 관문 우회 폐쇄 — 문맥 무관 JWT 규칙(WR-02) · 버튼 비활성 실패의 관문 통과(WR-03) · 디버그 덤프 이메일 원문 제거(IN-02)
+
+> **미룬 리뷰 항목 (근거는 각 PLAN 의 `<review_disposition>`):** WR-04(설정 IPC 런타임 검증)와
+> IN-01(설정 읽기 오류 로그 문구)은 Phase 07 로, IN-04(모달 `max-height`)는 `06-VALIDATION.md`
+> Manual-Only Verifications #2 관찰 이후로 미뤘다. 06-REVIEW.md 의 10개 발견 전부가 세 플랜 중
+> 한 곳에서 명시적으로 처리되거나 근거와 함께 미뤄졌다 — 조용히 누락된 항목은 없다.
 
 ### Phase 07: API 자격 증명 저장 + 토큰 만료 사전 경고
 
