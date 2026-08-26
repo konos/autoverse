@@ -8,8 +8,10 @@ import {
   describeLockedMode,
   shouldShowInlineNotice,
   decideTabClick,
+  buildFailureView,
 } from "../login-panel-view";
 import { API_MODE_NOTICE_VERSION } from "../../../shared/api-mode-notice";
+import type { CredentialLoginResult } from "../../../shared/types";
 
 describe("resolveTabView", () => {
   it("잠금이 없으면 활성 탭만 지정되고 두 탭 모두 조작 가능하다", () => {
@@ -124,5 +126,81 @@ describe("decideTabClick", () => {
       ackedVersion: API_MODE_NOTICE_VERSION,
     });
     expect(decision).toEqual({ action: "none" });
+  });
+});
+
+describe("buildFailureView", () => {
+  it("captcha 사유는 전환 버튼을 노출해야 한다", () => {
+    const result: CredentialLoginResult = {
+      success: false,
+      reason: "captcha",
+      message: "Weverse가 보안 확인을 요구해 앱 안 로그인으로는 진행할 수 없습니다. 브라우저 로그인을 사용해주세요.",
+    };
+    const view = buildFailureView(result);
+    expect(view.visible).toBe(true);
+    expect(view.showBrowserSwitch).toBe(true);
+    expect(view.identifier).toBeUndefined();
+  });
+
+  it("form-error 사유는 전환 버튼도 칩도 없다", () => {
+    const result: CredentialLoginResult = {
+      success: false,
+      reason: "form-error",
+      message: "이미 등록된 이메일입니다.",
+    };
+    const view = buildFailureView(result);
+    expect(view.visible).toBe(true);
+    expect(view.showBrowserSwitch).toBe(false);
+    expect(view.identifier).toBeUndefined();
+  });
+
+  it("network-error 사유는 칩 텍스트에 식별자가 포함된다", () => {
+    const result: CredentialLoginResult = {
+      success: false,
+      reason: "network-error",
+      message: "네트워크 오류로 로그인에 실패했습니다. 인터넷 연결을 확인한 뒤 다시 시도해주세요.",
+      identifier: "ECONNRESET",
+    };
+    const view = buildFailureView(result);
+    expect(view.visible).toBe(true);
+    expect(view.identifier).toBe("ECONNRESET");
+  });
+
+  it("unknown 사유에서 identifier가 없으면 칩 관련 필드 자체가 결과에 없다", () => {
+    const result: CredentialLoginResult = {
+      success: false,
+      reason: "unknown",
+      message: "로그인에 실패했습니다. 로그 패널에서 자세한 내용을 확인하세요.",
+    };
+    const view = buildFailureView(result);
+    expect(view.visible).toBe(true);
+    expect("identifier" in view).toBe(false);
+  });
+
+  it("성공 결과는 표시할 것이 없다", () => {
+    const view = buildFailureView({ success: true });
+    expect(view.visible).toBe(false);
+  });
+
+  it("null 결과도 표시할 것이 없다", () => {
+    const view = buildFailureView(null);
+    expect(view.visible).toBe(false);
+  });
+
+  it("연속으로 두 번 계산해도 이전 결과가 누적되지 않는다 — 항상 최신 하나만 반영한다", () => {
+    const first = buildFailureView({
+      success: false,
+      reason: "network-error",
+      message: "첫 번째 실패",
+      identifier: "first-id",
+    });
+    const second = buildFailureView({
+      success: false,
+      reason: "captcha",
+      message: "두 번째 실패",
+    });
+    expect(first.identifier).toBe("first-id");
+    expect(second.identifier).toBeUndefined();
+    expect(second.showBrowserSwitch).toBe(true);
   });
 });

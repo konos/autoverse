@@ -9,7 +9,7 @@
  * 파생돼야 한다(UI-SPEC key_links) — 셋을 따로 계산하면 UI가 거짓말할 수 있다.
  * `resolveTabView()`가 이 세 값을 한 곳에서 만든다.
  */
-import type { LoginMode } from "../../shared/types";
+import type { LoginMode, CredentialLoginResult } from "../../shared/types";
 import { API_MODE_NOTICE_VERSION, shouldShowApiModeNotice } from "../../shared/api-mode-notice";
 
 export interface TabView {
@@ -79,4 +79,19 @@ export function decideTabClick(input: TabClickInput): TabClickDecision {
     return { action: "save", mode: "api" };
   }
   return { action: "save", mode: input.next };
+}
+
+export interface FailureView {
+  visible: boolean;
+  message: string;
+  identifier?: string;
+  showBrowserSwitch: boolean;
+}
+
+/**
+ * 자격증명 로그인 결과를 오류 슬롯 렌더링용으로 정리한다.
+ * (RED phase placeholder — Task 3 GREEN commit fills this in.)
+ */
+export function buildFailureView(_result: CredentialLoginResult | null): FailureView {
+  throw new Error("not implemented");
 }
