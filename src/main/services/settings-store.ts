@@ -20,6 +20,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { LoginMode, LoginModeSnapshot, NoticeAckSnapshot } from "../../shared/types";
 import { resolveLoginMode, isLoginModeLockedByEnv } from "../login-mode";
+import { API_MODE_NOTICE_VERSION } from "../../shared/api-mode-notice";
 import { logService } from "./log-service";
 
 export const SETTINGS_FILENAME = "settings.json";
@@ -118,18 +119,20 @@ export class SettingsStore {
   }
 
   /**
-   * Storage/retrieval only in this task — Task 2 wires `currentVersion` to
-   * the shared `API_MODE_NOTICE_VERSION` constant and adds the re-notice
-   * decision function (`shouldShowApiModeNotice`).
+   * `currentVersion` is always the shared `API_MODE_NOTICE_VERSION` constant
+   * — the single source of truth `shouldShowApiModeNotice()` compares
+   * against (D-10).
    */
   getNoticeAck(): NoticeAckSnapshot {
     const current = readSettings();
-    // TODO(Task 2): replace this placeholder with the shared
-    // API_MODE_NOTICE_VERSION constant from src/shared/api-mode-notice.ts.
-    const CURRENT_NOTICE_VERSION_PLACEHOLDER = 1;
-    return { ackedVersion: current.apiModeNoticeAckedVersion, currentVersion: CURRENT_NOTICE_VERSION_PLACEHOLDER };
+    return { ackedVersion: current.apiModeNoticeAckedVersion, currentVersion: API_MODE_NOTICE_VERSION };
   }
 
+  /**
+   * Partial update — only `apiModeNoticeAckedVersion` changes. `loginMode`
+   * (and any other field) is read first and carried through untouched, so
+   * acknowledging the notice never clobbers the user's mode selection.
+   */
   ackNotice(version: number): void {
     const current = readSettings();
     writeSettings({ ...current, apiModeNoticeAckedVersion: version });

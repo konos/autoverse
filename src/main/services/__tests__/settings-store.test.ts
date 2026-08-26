@@ -47,6 +47,7 @@ vi.mock("fs", async (importOriginal) => {
 // Import AFTER mock declaration
 import { SettingsStore } from "../settings-store";
 import { logService } from "../log-service";
+import { API_MODE_NOTICE_VERSION } from "../../../shared/api-mode-notice";
 
 function makeStore(): { store: SettingsStore; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ss-test-"));
@@ -168,6 +169,48 @@ describe("SettingsStore.getLoginModeSnapshot — env 우선순위 (D-06)", () =>
 
     const snapshot = store.getLoginModeSnapshot({ AUTOVERSE_LOGIN_MODE: "browser" });
     expect(snapshot).toEqual({ mode: "browser", lockedByEnv: true });
+    cleanup(dir);
+  });
+});
+
+describe("SettingsStore.getNoticeAck — 파일 없음", () => {
+  it("파일이 없으면 { ackedVersion: null, currentVersion: 1 } 을 반환한다", () => {
+    const { store, dir } = makeStore();
+    expect(store.getNoticeAck()).toEqual({ ackedVersion: null, currentVersion: API_MODE_NOTICE_VERSION });
+    cleanup(dir);
+  });
+});
+
+describe("SettingsStore.ackNotice / getNoticeAck — 재시작 라운드트립", () => {
+  it("ackNotice(1) 후 새 인스턴스에서 조회해도 ackedVersion 이 1 로 유지된다", () => {
+    const { store, dir } = makeStore();
+    store.ackNotice(1);
+
+    const restarted = new SettingsStore();
+    expect(restarted.getNoticeAck().ackedVersion).toBe(1);
+    cleanup(dir);
+  });
+
+  it("ackNotice() 는 같은 파일의 loginMode 값을 덮어쓰지 않는다 (부분 갱신)", () => {
+    const { store, dir } = makeStore();
+    store.setLoginMode("api");
+    store.ackNotice(1);
+
+    expect(store.getLoginMode()).toBe("api");
+    expect(store.getNoticeAck().ackedVersion).toBe(1);
+    cleanup(dir);
+  });
+});
+
+describe("SettingsStore.getNoticeAck — 손상된 JSON", () => {
+  it("파싱 실패 시 던지지 않고 { ackedVersion: null, currentVersion: 1 } 을 반환한다", () => {
+    const { store, dir } = makeStore();
+    const filePath = path.join(dir, "settings.json");
+    fs.writeFileSync(filePath, "{ this is not valid json");
+
+    let ack: { ackedVersion: number | null; currentVersion: number } | undefined;
+    expect(() => { ack = store.getNoticeAck(); }).not.toThrow();
+    expect(ack).toEqual({ ackedVersion: null, currentVersion: API_MODE_NOTICE_VERSION });
     cleanup(dir);
   });
 });
