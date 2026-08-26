@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AuthStatus, LoginMode, CredentialLoginResult } from "../../shared/types";
+import type { AcknowledgeOutcome } from "../login-mode-actions";
 import ApiModeNoticeModal from "./ApiModeNoticeModal";
 import {
   resolveTabView,
@@ -7,6 +8,7 @@ import {
   shouldShowInlineNotice,
   decideTabClick,
   buildFailureView,
+  decideNoticeCancel,
 } from "./login-panel-view";
 
 interface LoginPanelProps {
@@ -20,7 +22,7 @@ interface LoginPanelProps {
   lockedByEnv: boolean;
   onSetLoginMode: (mode: LoginMode) => Promise<void>;
   noticeAck: { ackedVersion: number | null; currentVersion: number };
-  onAckNotice: (version: number) => Promise<void>;
+  onAcknowledgeNotice: (version: number) => Promise<AcknowledgeOutcome>;
 }
 
 type LoginState = "idle" | "logging-in" | "logged-in" | "expired";
@@ -56,7 +58,7 @@ export default function LoginPanel({
   lockedByEnv,
   onSetLoginMode,
   noticeAck,
-  onAckNotice,
+  onAcknowledgeNotice,
 }: LoginPanelProps) {
   const loginState = getLoginState(status, loading);
   const [email, setEmail] = useState("");
@@ -89,26 +91,33 @@ export default function LoginPanel({
     void onSetLoginMode(decision.mode);
   };
 
-  // Only "확인했습니다" may call ack-notice + set-login-mode — and only in
-  // that order (ack must succeed before the mode is persisted). Cancel/Esc
-  // never reach this handler.
+  // Only "확인했습니다" calls onAcknowledgeNotice. Cancel/Esc never reach
+  // this handler. onAcknowledgeNotice (createLoginModeActions()) owns the
+  // ack-then-mode-save ordering and the strict failure contract — this
+  // handler only branches on the returned AcknowledgeOutcome, it never
+  // infers success/failure via try/catch (06-08 gap closure, CR-01).
   const handleAcknowledge = async () => {
     setNoticeSaving(true);
     setNoticeSaveError(null);
-    try {
-      await onAckNotice(noticeAck.currentVersion);
-      await onSetLoginMode("api");
+    const outcome = await onAcknowledgeNotice(noticeAck.currentVersion);
+    if (outcome.ok) {
       setNoticeOpen(false);
-    } catch {
-      setNoticeSaveError("저장에 실패했습니다. 다시 시도해주세요.");
-    } finally {
-      setNoticeSaving(false);
+    } else {
+      setNoticeSaveError(outcome.error);
     }
+    setNoticeSaving(false);
   };
 
+  // WR-01: the Cancel button's disabled={noticeSaving} alone doesn't cover
+  // Esc — ApiModeNoticeModal routes the native `cancel` event (Esc) through
+  // this same handler, bypassing the button's disabled attribute entirely.
+  // decideNoticeCancel() is the single point both entry paths go through.
   const handleCancelNotice = () => {
-    setNoticeOpen(false);
-    setNoticeSaveError(null);
+    const decision = decideNoticeCancel(noticeSaving);
+    if (decision === "close") {
+      setNoticeOpen(false);
+      setNoticeSaveError(null);
+    }
   };
 
   const handleCredentialLogin = async () => {

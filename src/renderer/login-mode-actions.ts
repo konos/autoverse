@@ -31,6 +31,13 @@ export interface LoginModeActionDeps {
   onModeApplied: (mode: LoginMode) => void;
   onNoticeAcked: (version: number) => void;
   onBannerError: (message: string | null) => void;
+  /**
+   * devtools 콘솔 수준의 진단 훅이다 — 저장 실패의 원본 예외를 넘겨받아
+   * `console.error` 같은 곳으로 흘려보내는 용도로만 쓰인다. 앱 내 로그
+   * 패널(`LogPanel`)로는 흐르지 않는다(06-REVIEW.md IN-03). renderer→main
+   * 오류 포워딩 IPC 채널을 신설해 로그 패널까지 닿게 하는 것은 이 gap
+   * closure 의 범위 밖이며, 새 IPC 계약을 여는 별도 결정이 필요하다.
+   */
   onDiagnostic?: (err: unknown) => void;
 }
 

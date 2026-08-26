@@ -9,6 +9,7 @@ import {
   shouldShowInlineNotice,
   decideTabClick,
   buildFailureView,
+  decideNoticeCancel,
 } from "../login-panel-view";
 import { API_MODE_NOTICE_VERSION } from "../../../shared/api-mode-notice";
 import type { CredentialLoginResult } from "../../../shared/types";
@@ -202,5 +203,15 @@ describe("buildFailureView", () => {
     expect(first.identifier).toBe("first-id");
     expect(second.identifier).toBeUndefined();
     expect(second.showBrowserSwitch).toBe(true);
+  });
+});
+
+describe("decideNoticeCancel", () => {
+  it("저장이 진행 중이면 취소를 무시한다 (WR-01)", () => {
+    expect(decideNoticeCancel(true)).toBe("ignore");
+  });
+
+  it("저장이 진행 중이 아니면 닫는다", () => {
+    expect(decideNoticeCancel(false)).toBe("close");
   });
 });

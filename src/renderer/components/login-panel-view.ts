@@ -126,3 +126,20 @@ export function buildFailureView(result: CredentialLoginResult | null): FailureV
 
   return view;
 }
+
+export type NoticeCancelDecision = "ignore" | "close";
+
+/**
+ * 저장 진행 중 취소(Esc 포함)를 무시할지 판단한다(WR-01).
+ *
+ * 취소 버튼의 `disabled={noticeSaving}` 만으로는 부족하다 — `ApiModeNoticeModal`
+ * 의 네이티브 `<dialog>` 는 Esc 키를 `cancel` 이벤트로 받아 동일한 `onCancel`
+ * 로 라우팅하는데, 그 경로는 버튼의 disabled 속성을 거치지 않는다. 두 경로
+ * (버튼 클릭 / Esc)가 서로 다른 진입점에서 같은 상태(`noticeSaving`)를 몰래
+ * 건드릴 수 있는 경합이 남으므로, 이 판단을 컴포넌트 밖 순수 함수로 고정해
+ * 두 경로 모두가 반드시 거치게 한다. 저장이 진행 중이면 취소한 것처럼 보인
+ * 뒤 저장이 뒤늦게 성공해 모드가 조용히 바뀌는 일이 없도록 무시한다.
+ */
+export function decideNoticeCancel(saving: boolean): NoticeCancelDecision {
+  return saving ? "ignore" : "close";
+}

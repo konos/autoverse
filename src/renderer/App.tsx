@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AuthStatus, AuthEvent, FormSchema, LoginMode } from "../shared/types";
 import LoginPanel from "./components/LoginPanel";
 import ProfileForm from "./components/ProfileForm";
@@ -6,6 +6,7 @@ import EventSetup from "./components/EventSetup";
 import ApplyForm from "./components/ApplyForm";
 import ApplyExecution from "./components/ApplyExecution";
 import LogPanel from "./components/LogPanel";
+import { createLoginModeActions as makeLoginModeActions } from "./login-mode-actions";
 import "./styles.css";
 
 type AppStep = "login" | "profile" | "event-setup" | "apply-form" | "apply-execution";
@@ -126,25 +127,23 @@ export default function App() {
   // optimistically before), so a failed write leaves the previously-
   // selected tab visibly active — there is no separate rollback step
   // because the state was never advanced in the first place (UI-SPEC E1
-  // error).
-  const handleSetLoginMode = async (mode: LoginMode) => {
-    try {
-      await window.api.settings.setLoginMode(mode);
-      setLoginModeState(mode);
-      setLoginError(null);
-    } catch (err) {
-      console.error("로그인 방식 설정 저장 실패:", err);
-      setLoginError("설정 저장에 실패했습니다. 다시 시도해주세요.");
-    }
-  };
-
-  // Only called from LoginPanel's "확인했습니다" path — never from
-  // Cancel/Escape. Throws on IPC failure so the caller's try/catch (which
-  // gates the subsequent setLoginMode("api") call) can react.
-  const handleAckNotice = async (version: number) => {
-    await window.api.settings.ackNotice(version);
-    setNoticeAck((prev) => ({ ...prev, ackedVersion: version }));
-  };
+  // error). The login-mode-actions factory owns the actual save/failure
+  // decisions now (06-08 gap closure, CR-01) — this component only wires
+  // its own state setters as deps and never decides which failure
+  // contract to use for which caller.
+  const loginModeActions = useMemo(
+    () =>
+      makeLoginModeActions({
+        persistLoginMode: (mode) => window.api.settings.setLoginMode(mode),
+        persistNoticeAck: (version) => window.api.settings.ackNotice(version),
+        onModeApplied: (mode) => setLoginModeState(mode),
+        onNoticeAcked: (version) => setNoticeAck((prev) => ({ ...prev, ackedVersion: version })),
+        onBannerError: (message) => setLoginError(message),
+        onDiagnostic: (err) => console.error("로그인 방식 설정 저장 실패:", err),
+      }),
+    // React setState 함수와 window.api 는 안정적이므로 의존성 배열을 비운다.
+    [],
+  );
 
   const handleProfileSaved = () => {
     setStep("event-setup");
@@ -177,9 +176,9 @@ export default function App() {
         onValidateToken={handleValidateToken}
         loginMode={loginMode}
         lockedByEnv={lockedByEnv}
-        onSetLoginMode={handleSetLoginMode}
+        onSetLoginMode={loginModeActions.setLoginMode}
         noticeAck={noticeAck}
-        onAckNotice={handleAckNotice}
+        onAcknowledgeNotice={loginModeActions.acknowledgeApiModeNotice}
       />
 
       {step === "profile" && authStatus.isLoggedIn && authStatus.fanId !== undefined && (
