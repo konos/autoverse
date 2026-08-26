@@ -1,10 +1,16 @@
 /**
  * ApiAuthClient — pure HTTP client for the Weverse account API.
  *
- * Implements the 3-step credential login (otp-sessions → by-credentials →
- * by-credentials-with-otp) plus the account→fanevent token ladder (R019):
+ * Implements the account→fanevent token ladder (R019):
  *   rung 1: try the account token directly against /fans/me
  *   rung 2: exchange via by-access-token, then retry /fans/me
+ *
+ * The 3-step credential login this client originally also implemented
+ * (otp-sessions → by-credentials → by-credentials-with-otp) was removed in
+ * Phase 06 Plan 04 (D-02) — 2026-08-25 HAR capture showed 0 real calls to
+ * otp-sessions/by-credentials-with-otp; the only login path that actually
+ * works is AuthService.credentialLogin()'s headless BrowserWindow (D-01).
+ * See .planning/phases/05-api/05-01-SUMMARY.md for the disproven contract.
  *
  * This module never imports the electron package and never touches
  * Electron's session/cookies APIs — it must stay independent of the
@@ -19,11 +25,6 @@ const FANS_ME_URL = "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
 const ACCOUNT_TIMEOUT_MS = 10_000;
 const TARGET_SERVICE_ID = "weverse";
 
-// PROJECT.md's verified contract only lists the field name, not the value.
-// 0 (session-lifetime cookie) is sent first; if the server rejects it with
-// -26000, the Task 3 checkpoint retries once with 2592000 (30 days).
-const REFRESH_TOKEN_COOKIE_TTL = 0;
-
 export class ApiAuthError extends Error {
   constructor(
     public readonly code: string,
@@ -33,11 +34,6 @@ export class ApiAuthError extends Error {
     super(message);
     this.name = "ApiAuthError";
   }
-}
-
-export interface OtpSession {
-  otpSessionId: string;
-  expiresIn?: number;
 }
 
 export interface AccountTokens {
@@ -142,71 +138,7 @@ export class ApiAuthClient {
     }
   }
 
-  // ── Public login steps ───────────────────────────────────────────────
-
-  async requestOtpSession(email: string): Promise<OtpSession> {
-    logService.info("ApiAuthClient", `requestOtpSession email=${email.slice(0, 3)}***`);
-    const raw = await this.postAccount<Record<string, unknown>>("/v2/auth/otp-sessions", { email });
-
-    // Observability (05-01 결함 B): 응답 스키마가 가정과 다르면 조용히 undefined
-    // 를 by-credentials 로 흘려보내는 대신, 여기서 즉시 드러낸다. 키 이름과
-    // 존재여부/길이만 로그에 남기고 otpSessionId 값 자체나 이메일 전체는 남기지
-    // 않는다. expiresIn 은 민감정보가 아니므로 값을 그대로 남긴다.
-    const keys = raw && typeof raw === "object" ? Object.keys(raw) : [];
-    const otpSessionIdValue = raw && typeof raw === "object" ? raw.otpSessionId : undefined;
-    const hasOtpSessionId = typeof otpSessionIdValue === "string" && otpSessionIdValue.length > 0;
-    const expiresIn = raw && typeof raw === "object" ? raw.expiresIn : undefined;
-    logService.info(
-      "ApiAuthClient",
-      `requestOtpSession response keys=[${keys.join(",")}] hasOtpSessionId=${hasOtpSessionId} otpSessionIdLen=${hasOtpSessionId ? (otpSessionIdValue as string).length : 0} expiresIn=${expiresIn ?? "absent"}`,
-    );
-
-    if (!hasOtpSessionId) {
-      logService.error(
-        "ApiAuthClient",
-        "requestOtpSession: otpSessionId missing or not a non-empty string — refusing to proceed to by-credentials",
-      );
-      throw new ApiAuthError(
-        "OTP_SESSION_MALFORMED",
-        "OTP 세션 응답에 otpSessionId 가 없습니다 — 서버 응답 스키마가 예상과 다릅니다",
-      );
-    }
-
-    return {
-      otpSessionId: otpSessionIdValue as string,
-      expiresIn: typeof expiresIn === "number" ? expiresIn : undefined,
-    };
-  }
-
-  async loginWithCredentials(
-    email: string,
-    password: string,
-    otpSessionId: string,
-  ): Promise<AccountTokens> {
-    return this.postAccount<AccountTokens>("/v4/auth/token/by-credentials", {
-      email,
-      password,
-      otpSessionId,
-    });
-  }
-
-  async verifyOtp(
-    email: string,
-    password: string,
-    otpSessionId: string,
-    otpCode: string,
-  ): Promise<AccountTokens> {
-    return this.postAccount<AccountTokens>(
-      "/v3/auth/token/by-credentials-with-otp",
-      {
-        email,
-        password,
-        otpSessionId,
-        otpCode,
-        refreshTokenCookieTtl: REFRESH_TOKEN_COOKIE_TTL,
-      },
-    );
-  }
+  // ── Token exchange / probe (R019 ladder rungs) ─────────────────────────
 
   async exchangeForService(
     accountAccessToken: string,

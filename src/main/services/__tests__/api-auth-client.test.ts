@@ -1,7 +1,13 @@
 /**
- * Unit tests for ApiAuthClient — Phase 05 pure HTTP account API login +
- * account→fanevent token ladder (R017/R018/R019).
+ * Unit tests for ApiAuthClient — account→fanevent token ladder (R019).
  * Electron 의존성 없음. fetch를 주입(DI)해서 모킹 — 실네트워크 0회.
+ *
+ * Phase 06 Plan 04 (D-02): 이 스위트는 원래 계정 API 3단계 로그인
+ * (otp-sessions → by-credentials → by-credentials-with-otp)도 검증했으나,
+ * 그 계약이 05-01 HAR 실측으로 반증되어 관련 describe 3개(otp-session/
+ * otp verify/error)를 통째로 삭제했다. 사다리(exchange/ladder)와 tracer,
+ * 민감정보 취지는 남은 메서드(exchangeForService/probeFaneventToken/
+ * acquireFaneventToken)를 대상으로 그대로 유지·재작성한다.
  */
 import { describe, it, expect, vi } from "vitest";
 import { ApiAuthClient, ApiAuthError } from "../api-auth-client";
@@ -38,169 +44,11 @@ function makeFetchQueue(responses: StubResponse[]): typeof globalThis.fetch {
   });
 }
 
-function makeAbortingFetch(): typeof globalThis.fetch {
-  return vi.fn(async () => {
-    const err = new Error("The operation was aborted");
-    err.name = "AbortError";
-    throw err;
-  });
-}
-
 function callInit(fetchFn: typeof globalThis.fetch, index = 0): [string, RequestInit] {
   const mock = fetchFn as unknown as ReturnType<typeof vi.fn>;
   const call = mock.mock.calls[index] as [string, RequestInit];
   return call;
 }
-
-// ── otp-session ──────────────────────────────────────────────────────────
-
-describe("ApiAuthClient otp-session", () => {
-  it("otp-session: POST /v2/auth/otp-sessions 에 email 바디와 6개 공통 헤더를 실어 보낸다", async () => {
-    const fetchFn = makeFetchQueue([{ status: 200, body: { otpSessionId: "sess-1" } }]);
-    const client = new ApiAuthClient(fetchFn);
-
-    const result = await client.requestOtpSession("user@example.com");
-
-    expect(result.otpSessionId).toBe("sess-1");
-    const [url, init] = callInit(fetchFn);
-    expect(url).toBe("https://accountapi.weverse.io/web/api/v2/auth/otp-sessions");
-    expect(JSON.parse(init.body as string)).toEqual({ email: "user@example.com" });
-    const headers = init.headers as Record<string, string>;
-    expect(headers["X-ACC-APP-VERSION"]).toBeTruthy();
-    expect(headers["X-ACC-APP-SECRET"]).toBeTruthy();
-    expect(headers["X-ACC-SERVICE-ID"]).toBeTruthy();
-    expect(headers["X-ACC-LANGUAGE"]).toBeTruthy();
-    expect(headers["X-ACC-TRACE-ID"]).toBeTruthy();
-    expect(headers["Content-Type"]).toBe("application/json");
-  });
-
-  it("trace-id: 연속 두 호출의 X-ACC-TRACE-ID 가 서로 다르다", async () => {
-    const fetchFn = makeFetchQueue([
-      { status: 200, body: { otpSessionId: "sess-1" } },
-      { status: 200, body: { otpSessionId: "sess-2" } },
-    ]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await client.requestOtpSession("user@example.com");
-    await client.requestOtpSession("user@example.com");
-
-    const [, init1] = callInit(fetchFn, 0);
-    const [, init2] = callInit(fetchFn, 1);
-    const trace1 = (init1.headers as Record<string, string>)["X-ACC-TRACE-ID"];
-    const trace2 = (init2.headers as Record<string, string>)["X-ACC-TRACE-ID"];
-    expect(trace1).not.toBe(trace2);
-  });
-
-  it("otp-session malformed: 응답에 otpSessionId 가 없으면 OTP_SESSION_MALFORMED 로 즉시 실패하고 by-credentials 로 진행하지 않는다 (05-01 결함 B)", async () => {
-    const fetchFn = makeFetchQueue([{ status: 200, body: { unexpectedField: "surprise" } }]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await expect(client.requestOtpSession("user@example.com")).rejects.toMatchObject({
-      code: "OTP_SESSION_MALFORMED",
-    });
-
-    // Only the one otp-sessions call happened — no silent fall-through to another endpoint.
-    const mock = fetchFn as unknown as ReturnType<typeof vi.fn>;
-    expect(mock.mock.calls.length).toBe(1);
-  });
-
-  it("otp-session malformed: otpSessionId 가 빈 문자열이면 OTP_SESSION_MALFORMED 로 실패한다", async () => {
-    const fetchFn = makeFetchQueue([{ status: 200, body: { otpSessionId: "" } }]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await expect(client.requestOtpSession("user@example.com")).rejects.toMatchObject({
-      code: "OTP_SESSION_MALFORMED",
-    });
-  });
-
-  it("otp-session malformed: otpSessionId 가 문자열이 아니면 OTP_SESSION_MALFORMED 로 실패한다", async () => {
-    const fetchFn = makeFetchQueue([{ status: 200, body: { otpSessionId: 12345 } }]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await expect(client.requestOtpSession("user@example.com")).rejects.toMatchObject({
-      code: "OTP_SESSION_MALFORMED",
-    });
-  });
-
-  it("otp-session 관측성: 정상 응답이면 응답 키 이름 목록과 otpSessionId 존재 여부가 로그로 남는다 (값은 남기지 않음)", async () => {
-    const fetchFn = makeFetchQueue([{ status: 200, body: { otpSessionId: "sess-real-value-123" } }]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await client.requestOtpSession("user@example.com");
-
-    const infoSpy = logService.info as unknown as ReturnType<typeof vi.fn>;
-    const allArgs = infoSpy.mock.calls.map((call) => JSON.stringify(call)).join("\n");
-    expect(allArgs).toContain("otpSessionId");
-    expect(allArgs).toContain("hasOtpSessionId=true");
-    expect(allArgs).not.toContain("sess-real-value-123");
-  });
-});
-
-// ── otp verify ───────────────────────────────────────────────────────────
-
-describe("ApiAuthClient otp verify", () => {
-  it("otp verify: by-credentials-with-otp 바디에 email/password/otpSessionId/otpCode/refreshTokenCookieTtl 5개 필드가 모두 들어간다", async () => {
-    const fetchFn = makeFetchQueue([
-      { status: 200, body: { accessToken: "acc-tok", serviceUserId: "u1" } },
-    ]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await client.verifyOtp("user@example.com", "P@ssw0rd-test-literal", "sess-1", "654321");
-
-    const [url, init] = callInit(fetchFn);
-    expect(url).toBe("https://accountapi.weverse.io/web/api/v3/auth/token/by-credentials-with-otp");
-    const body = JSON.parse(init.body as string);
-    expect(Object.keys(body).sort()).toEqual(
-      ["email", "otpCode", "otpSessionId", "password", "refreshTokenCookieTtl"].sort(),
-    );
-    expect(body.email).toBe("user@example.com");
-    expect(body.password).toBe("P@ssw0rd-test-literal");
-    expect(body.otpSessionId).toBe("sess-1");
-    expect(body.otpCode).toBe("654321");
-    expect(typeof body.refreshTokenCookieTtl).toBe("number");
-  });
-});
-
-// ── error ────────────────────────────────────────────────────────────────
-
-describe("ApiAuthClient error", () => {
-  it('error: -25044 응답을 code="-25044" 인 ApiAuthError 로 던진다', async () => {
-    const fetchFn = makeFetchQueue([
-      { status: 400, body: { code: -25044, message: "이메일 OTP 인증이 필요합니다" } },
-    ]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await expect(
-      client.loginWithCredentials("user@example.com", "pw", "sess-1"),
-    ).rejects.toMatchObject({
-      code: "-25044",
-      message: "이메일 OTP 인증이 필요합니다",
-    });
-  });
-
-  it('error: -26000 응답을 code="-26000" 으로 전파한다', async () => {
-    const fetchFn = makeFetchQueue([
-      { status: 400, body: { code: -26000, message: "[ERROR] 잘못된 API 사용입니다." } },
-    ]);
-    const client = new ApiAuthClient(fetchFn);
-
-    await expect(
-      client.loginWithCredentials("user@example.com", "pw", "sess-1"),
-    ).rejects.toMatchObject({
-      code: "-26000",
-      message: "[ERROR] 잘못된 API 사용입니다.",
-    });
-  });
-
-  it('error: 네트워크 abort 를 code="NETWORK_ERROR" 로 던진다', async () => {
-    const client = new ApiAuthClient(makeAbortingFetch());
-
-    await expect(client.requestOtpSession("user@example.com")).rejects.toMatchObject({
-      code: "NETWORK_ERROR",
-    });
-    await expect(client.requestOtpSession("user@example.com")).rejects.toBeInstanceOf(ApiAuthError);
-  });
-});
 
 // ── exchange ─────────────────────────────────────────────────────────────
 
@@ -258,6 +106,7 @@ describe("ApiAuthClient exchange", () => {
     await expect(client.exchangeForService("account-tok")).rejects.toMatchObject({
       code: "EXCHANGE_RESPONSE_MALFORMED",
     });
+    await expect(client.exchangeForService("account-tok")).rejects.toBeInstanceOf(ApiAuthError);
   });
 
   it("exchange 방어: accessToken 이 빈 문자열이면 EXCHANGE_RESPONSE_MALFORMED 로 실패한다", async () => {
@@ -313,66 +162,63 @@ describe("ApiAuthClient ladder", () => {
 });
 
 // ── tracer end-to-end ────────────────────────────────────────────────────
+//
+// Phase 06 Plan 04 재작성: 옛 tracer 는 삭제된 4개 메서드(requestOtpSession →
+// loginWithCredentials → verifyOtp → acquireFaneventToken)를 순서대로
+// 체이닝했다. 이제 계정 토큰은 AuthService.credentialLogin() 의 헤드리스
+// 브라우저 로그인에서 나온다(이 클라이언트의 책임 밖) — 남은 사다리만으로
+// "계정 토큰 → 팬이벤트 토큰 + fanId" 를 얻는 종단 시나리오로 다시 쓴다.
 
 describe("ApiAuthClient tracer", () => {
-  it("tracer end-to-end: otp-session → by-credentials(-25044) → verifyOtp → acquireFaneventToken 순서로 팬이벤트 토큰과 fanId 를 얻는다", async () => {
+  it("tracer end-to-end: 헤드리스 로그인이 확보한 계정 토큰을 사다리에 흘려 팬이벤트 토큰과 fanId 를 얻는다 (rung1 direct)", async () => {
     const fetchFn = makeFetchQueue([
-      { status: 200, body: { otpSessionId: "sess-1" } }, // otp-sessions
-      { status: 400, body: { code: -25044, message: "OTP 필요" } }, // by-credentials
-      { status: 200, body: { accessToken: "account-tok", serviceUserId: "u1" } }, // by-credentials-with-otp
       { status: 200, body: { fanId: 7 } }, // /fans/me (rung1 direct succeeds)
     ]);
     const client = new ApiAuthClient(fetchFn);
 
-    const otpSession = await client.requestOtpSession("user@example.com");
+    // credentialLogin() 의 헤드리스 브라우저 로그인이 확보했다고 가정하는 계정 토큰.
+    const accountAccessToken = "account-tok-from-headless-login";
 
-    let needOtp = false;
-    try {
-      await client.loginWithCredentials("user@example.com", "P@ssw0rd-test-literal", otpSession.otpSessionId);
-    } catch (err) {
-      if (err instanceof ApiAuthError && err.code === "-25044") {
-        needOtp = true;
-      } else {
-        throw err;
-      }
-    }
-    expect(needOtp).toBe(true);
+    const faneventToken = await client.acquireFaneventToken(accountAccessToken);
 
-    const tokens = await client.verifyOtp(
-      "user@example.com",
-      "P@ssw0rd-test-literal",
-      otpSession.otpSessionId,
-      "654321",
-    );
-    const faneventToken = await client.acquireFaneventToken(tokens.accessToken);
+    expect(faneventToken).toEqual({ token: accountAccessToken, source: "direct", fanId: 7 });
+  });
 
-    expect(faneventToken).toEqual({ token: "account-tok", source: "direct", fanId: 7 });
+  it("tracer end-to-end: rung1 이 401 이면 exchangeForService 를 거쳐 팬이벤트 토큰을 얻는다 (rung2 exchange)", async () => {
+    const fetchFn = makeFetchQueue([
+      { status: 401 }, // first /fans/me (rung1 fails)
+      { status: 200, body: { accessToken: "exchanged-tok" } }, // by-access-token
+      { status: 200, body: { fanId: 8 } }, // second /fans/me (rung2 succeeds)
+    ]);
+    const client = new ApiAuthClient(fetchFn);
+
+    const faneventToken = await client.acquireFaneventToken("account-tok-from-headless-login");
+
+    expect(faneventToken).toEqual({ token: "exchanged-tok", source: "exchange", fanId: 8 });
   });
 });
 
 // ── sensitive data ───────────────────────────────────────────────────────
+//
+// 옛 민감정보 테스트는 password/otpCode 를 다뤘으나 그 필드들은 삭제된
+// requestOtpSession/loginWithCredentials/verifyOtp 전용이었다 — 이 클라이언트는
+// 더 이상 비밀번호/OTP 코드를 다루지 않는다. 남은 메서드가 다루는 민감정보는
+// 계정/팬이벤트 액세스 토큰이므로, 그 값이 로그에 원문으로 남지 않는다는
+// 취지를 유지한 채 재작성한다.
 
 describe("ApiAuthClient 민감정보", () => {
-  it("민감정보: password/otpCode 가 어떤 로그 인자에도 포함되지 않는다", async () => {
-    const password = "P@ssw0rd-test-literal";
-    const otpCode = "654321";
+  it("민감정보: 계정/팬이벤트 액세스 토큰 원문이 어떤 로그 인자에도 포함되지 않는다", async () => {
+    const accountAccessToken = "account-tok-real-value-should-not-leak";
+    const exchangedAccessToken = "exchanged-tok-real-value-should-not-leak";
 
     const fetchFn = makeFetchQueue([
-      { status: 200, body: { otpSessionId: "sess-1" } },
-      { status: 400, body: { code: -25044, message: "OTP 필요" } },
-      { status: 200, body: { accessToken: "account-tok", serviceUserId: "u1" } },
-      { status: 200, body: { fanId: 7 } },
+      { status: 401 }, // rung1 direct fails
+      { status: 200, body: { accessToken: exchangedAccessToken } }, // by-access-token
+      { status: 200, body: { fanId: 7 } }, // rung2 succeeds
     ]);
     const client = new ApiAuthClient(fetchFn);
 
-    const otpSession = await client.requestOtpSession("user@example.com");
-    try {
-      await client.loginWithCredentials("user@example.com", password, otpSession.otpSessionId);
-    } catch {
-      // expected -25044
-    }
-    const tokens = await client.verifyOtp("user@example.com", password, otpSession.otpSessionId, otpCode);
-    await client.acquireFaneventToken(tokens.accessToken);
+    await client.acquireFaneventToken(accountAccessToken);
 
     const spies = [logService.info, logService.warn, logService.error, logService.debug] as ReturnType<
       typeof vi.fn
@@ -382,7 +228,7 @@ describe("ApiAuthClient 민감정보", () => {
       .map((call) => JSON.stringify(call))
       .join("\n");
 
-    expect(allArgs).not.toContain(password);
-    expect(allArgs).not.toContain(otpCode);
+    expect(allArgs).not.toContain(accountAccessToken);
+    expect(allArgs).not.toContain(exchangedAccessToken);
   });
 });
