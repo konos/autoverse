@@ -171,18 +171,34 @@ This file is the explicit capability and coverage contract for the project.
 - Source: user
 - Primary owning slice: v0.3.0/Phase 06
 - Validation: unmapped
-- Notes: 주요 코드 — -25003 WRONG_ID_OR_PASSWORD, -25044 OTP 필요, -26000 잘못된 API 사용, -26004 계정 상태 이상, RESTRICTED_OVERSEAS_LOGIN(해외 로그인 차단), PASSWORD_RESET_REQUIRED. 로그에는 마스킹 규칙(R010) 유지.
+- Notes: **[VOID — 도달 불가]** 주요 코드 — -25003 WRONG_ID_OR_PASSWORD, -25044 OTP 필요, -26000 잘못된 API 사용, -26004 계정 상태 이상, RESTRICTED_OVERSEAS_LOGIN(해외 로그인 차단), PASSWORD_RESET_REQUIRED. 로그에는 마스킹 규칙(R010) 유지.
+  이 코드들은 D-02 가 제거하는 순수 HTTP `by-credentials` 경로에서만 발생하므로 구현해도 도달할 수
+  없다(2026-08-25 HAR 반증, 근거: `.planning/phases/05-api/05-01-SUMMARY.md`). **정정 — 2026-08-26,
+  D-12:** 실제 매핑 대상은 `credentialLogin()`(헤드리스 자동입력 경로)이 실제로 내보내는 6가지 실패
+  신호다 — ① reCAPTCHA 챌린지 감지(캡차 위젯) ② Weverse 폼이 표시하는 오류 텍스트 ③ 25초 응답
+  타임아웃 ④ 네트워크/런타임 예외 ⑤ 토큰 사다리(`acquireFaneventToken()`) 실패 ⑥ 위 어디에도
+  속하지 않는 미매핑 실패(일반 안내 + 식별자 병기). 구현 위치는 `src/shared/login-failure.ts`
+  (순수 함수, D-12/D-13/D-14). R010 마스킹 규칙 유지 문장은 그대로 유효하다.
 
-### R021 — API 모드 제약 사전 고지
+### R021 — API 모드 제약 사전 고지 [정정 — 2026-08-26]
 
 - Class: failure-visibility
 - Status: active
-- Description: 사용자가 API 모드를 선택할 때 "매 로그인마다 이메일 OTP 입력 필요, 자동 재로그인 불가"를 명시적으로 안내한다.
+- Description: 사용자가 API 모드를 선택할 때 **[VOID — 2026-08-25 HAR 반증]** "매 로그인마다 이메일
+  OTP 입력 필요, 자동 재로그인 불가"를 명시적으로 안내한다.
+  **정정 — 2026-08-26, D-08:** 실제로 안내해야 할 제약은 다음 2가지다 — ① Weverse 보안 확인
+  (reCAPTCHA)이 뜨면 이 방식(API 모드 = `credentialLogin()` 헤드리스 자동입력 경로)으로는 로그인이
+  실패할 수 있고 그때는 브라우저 방식을 써야 한다 ② 자동 재로그인이 없으므로 앱 재시작이나 토큰
+  만료 시 직접 로그인해야 한다.
 - Why it matters: 클라이언트는 API 모드가 더 자동화된 방식이라고 기대했으나 실제로는 그 반대다. 기대치 불일치를 선택 시점에 해소한다.
 - Source: 실서버 검증
 - Primary owning slice: v0.3.0/Phase 06
 - Validation: unmapped
 - Notes: 캡차 우회는 영구 제외(R013)이므로 제약을 없애는 것이 아니라 알리는 것이 목표.
+  근거: `.planning/phases/05-api/05-01-SUMMARY.md` — HAR 436 entries 에서 OTP 관련 호출 0건
+  (`/v2/auth/otp-sessions`, `/v3/auth/token/by-credentials-with-otp`, `/v2/auth/otp` 모두 미호출).
+  실제 관문은 reCAPTCHA Enterprise 이며, 순수 HTTP 로는 채울 수 없어 헤드리스 BrowserWindow 가
+  자체 처리한다(D-01).
 
 ### R022 — 신청 시각 전 토큰 수명 체크 및 재로그인 유도
 
@@ -278,8 +294,8 @@ This file is the explicit capability and coverage contract for the project.
 | R017 | core-capability | active | v0.3.0/Phase 05 | none | 2026-08-25 HAR 실측으로 로그인 계약 정정 — otpSessionId=reCAPTCHA 토큰, 3단계 순서 아님 (근거: 05-01-SUMMARY.md) |
 | R018 | core-capability | blocked | none | none | 2026-08-25 Phase 05 매핑 해제 — HAR 상 OTP 단계 부재, 미입증 |
 | R019 | core-capability | validated | v0.3.0/Phase 05 | none | 2026-08-25 실계정 관측: rung1(직접 사용)이 계정 도메인 쿠키(JWT)로 /fans/me 200+fanId 확보 (근거: 05-SPIKE-RESULT.md). rung2(교환)는 미실행으로 여전히 미검증 |
-| R020 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
-| R021 | failure-visibility | active | v0.3.0/Phase 06 | none | unmapped |
+| R020 | failure-visibility | active | v0.3.0/Phase 06 | none | 2026-08-26 Phase 06 D-11 정정 — 반증 서술 VOID 마킹, 실제 매핑 대상으로 재정의 |
+| R021 | failure-visibility | active | v0.3.0/Phase 06 | none | 2026-08-26 Phase 06 D-11 정정 — 반증 서술 VOID 마킹, 실제 매핑 대상으로 재정의 |
 | R022 | safety-guard | active | v0.3.0/Phase 07 | none | unmapped |
 | R023 | core-capability | active | v0.3.0/Phase 07 | none | unmapped |
 
