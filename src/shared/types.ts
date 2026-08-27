@@ -152,6 +152,7 @@ export type ApplyEventType =
   | "form-fetched"
   | "time-synced"
   | "armed"
+  | "token-expiry-checked"
   | "post-submitted"
   | "poll-result"
   | "completed"

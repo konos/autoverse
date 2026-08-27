@@ -4,7 +4,25 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ApplyEngine } from "../apply-engine";
-import type { FormSchema, TimeSyncResult } from "../../../shared/types";
+import type { FormSchema, TimeSyncResult, ApplyEvent } from "../../../shared/types";
+
+// ── JWT fixture helper (mirrors auth-service.test.ts / mask.test.ts) ──────────
+
+function base64urlEncode(obj: object): string {
+  return Buffer.from(JSON.stringify(obj))
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+}
+
+function makeJwt(payload: object): string {
+  const header = base64urlEncode({ alg: "HS256", typ: "JWT" });
+  const body = base64urlEncode(payload);
+  return `${header}.${body}.fakesig`;
+}
+
+const DEFAULT_TEST_TOKEN = "test-token-that-is-long-enough-for-masking-purposes-here";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -33,9 +51,20 @@ vi.mock("electron", () => ({
   },
 }));
 
-// Mock authService to return a test token
+// Mock authService to return a test token. `vi.hoisted()` is required because
+// `vi.mock()` factories are hoisted above all imports — the box lets each test
+// swap the token via a getter instead of a fixed value (needed for the
+// token-expiry-checked cases below), while `beforeEach` restores the default
+// so unrelated tests keep seeing the original fixed token.
+const { tokenBox } = vi.hoisted(() => ({ tokenBox: { current: "" } }));
+tokenBox.current = DEFAULT_TEST_TOKEN;
+
 vi.mock("../auth-service", () => ({
-  authService: { token: "test-token-that-is-long-enough-for-masking-purposes-here" },
+  authService: {
+    get token() {
+      return tokenBox.current;
+    },
+  },
 }));
 
 // Mock profileStore to return a test profile
@@ -49,6 +78,10 @@ vi.mock("../profile-store", () => ({
     }),
   },
 }));
+
+beforeEach(() => {
+  tokenBox.current = DEFAULT_TEST_TOKEN;
+});
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -208,6 +241,73 @@ describe("ApplyEngine — arm()", () => {
 
     expect(events[0].consentIds).toEqual([1, 2]);
     // should NOT auto-fill with schema consent IDs not provided by user
+  });
+});
+
+describe("ApplyEngine — arm() 만료 판정 (D-10, R022)", () => {
+  it("(a) 예정 시각 직후에 만료되는 토큰으로 arm하면 token-expiry-checked가 warning+expAt으로 발행된다", async () => {
+    const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
+    const schema = await engine.fetchForm("EVENT001");
+    const plannedSubmitAtMs = new Date(schema.applyPeriod.startAt).getTime();
+    const expSec = Math.floor((plannedSubmitAtMs + 1_000) / 1000);
+    tokenBox.current = makeJwt({ exp: expSec });
+
+    const events: ApplyEvent[] = [];
+    engine.on("token-expiry-checked", (e) => events.push(e));
+
+    engine.arm([100], [1, 2]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].data?.status).toBe("warning");
+    expect(events[0].data?.expAt).toBe(expSec * 1000);
+  });
+
+  it("(b) 충분히 먼 exp를 가진 토큰으로 arm하면 token-expiry-checked가 safe로 발행된다", async () => {
+    const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
+    const schema = await engine.fetchForm("EVENT001");
+    const plannedSubmitAtMs = new Date(schema.applyPeriod.startAt).getTime();
+    const expSec = Math.floor((plannedSubmitAtMs + 10 * 60 * 1000) / 1000); // headroom(3min) 훨씬 밖
+    tokenBox.current = makeJwt({ exp: expSec });
+
+    const events: ApplyEvent[] = [];
+    engine.on("token-expiry-checked", (e) => events.push(e));
+
+    engine.arm([100], [1, 2]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].data?.status).toBe("safe");
+    expect(events[0].data?.expAt).toBeUndefined();
+  });
+
+  it("(c) 비-JWT 토큰으로 arm하면 token-expiry-checked가 unknown으로 발행된다", async () => {
+    const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
+    await engine.fetchForm("EVENT001");
+    tokenBox.current = "not-a-jwt-token";
+
+    const events: ApplyEvent[] = [];
+    engine.on("token-expiry-checked", (e) => events.push(e));
+
+    engine.arm([100], [1, 2]);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].data?.status).toBe("unknown");
+    expect(events[0].data?.expAt).toBeUndefined();
+  });
+
+  it("(d) arm이 발행하는 이벤트에 armed와 token-expiry-checked가 모두 있고 armed가 먼저다", async () => {
+    const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
+    await engine.fetchForm("EVENT001");
+
+    const emitted: string[] = [];
+    engine.on("apply-event", (e) => emitted.push(e.type));
+
+    engine.arm([100], [1, 2]);
+
+    const armedIdx = emitted.indexOf("armed");
+    const checkedIdx = emitted.indexOf("token-expiry-checked");
+    expect(armedIdx).toBeGreaterThanOrEqual(0);
+    expect(checkedIdx).toBeGreaterThanOrEqual(0);
+    expect(armedIdx).toBeLessThan(checkedIdx);
   });
 });
 

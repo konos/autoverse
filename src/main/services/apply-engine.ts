@@ -6,6 +6,7 @@ import { profileStore } from "./profile-store";
 import { buildApplyPayload } from "../../shared/payload-builder";
 import { validateFormSchema } from "../../shared/form-parser";
 import { maskToken } from "../../shared/mask";
+import { parseJwtExpMs, evaluateTokenExpiry, RELOGIN_HEADROOM_MS } from "../../shared/token-expiry";
 import { logService } from "./log-service";
 import type {
   FormSchema,
@@ -126,6 +127,34 @@ export class ApplyEngine extends EventEmitter {
       data: {
         rewardIds: selectedRewardIds,
         consentIds,
+      },
+    });
+
+    // ── D-10: arm 즉시 만료 판정 ────────────────────────────────────────────
+    // exp 는 재로그인 전까지 불변이므로 arm 시점에 이미 결론이 난다 — 가장 이른
+    // 시점에 경고해 최대 대응 시간을 준다. 예정 시각은 syncTime() 을 새로
+    // 호출하지 않고 schema.applyPeriod.startAt 을 그대로 쓴다(D-08, 외부 호출
+    // 0건 — syncResult 는 execute() 안에서만 채워지므로 arm() 시점엔 존재하지
+    // 않는다). 판정 실패가 arm 자체를 실패시키지 않는다 — 결과가 safe/warning/
+    // unknown 어느 쪽이든 항상 이벤트를 발행한다(재판정 시 이전 경고를 지울 수
+    // 있어야 하므로 safe 도 발행한다, D-12).
+    const plannedSubmitAtMs = new Date(this.schema.applyPeriod.startAt).getTime();
+    const expMs = parseJwtExpMs(authService.token);
+    const expiryState = evaluateTokenExpiry(expMs, plannedSubmitAtMs, RELOGIN_HEADROOM_MS);
+
+    logService.info(
+      "ApplyEngine",
+      `token-expiry-checked status=${expiryState.status} plannedSubmitAt=${new Date(plannedSubmitAtMs).toISOString()} headroomMs=${RELOGIN_HEADROOM_MS}`,
+    );
+
+    this._emitEvent({
+      type: "token-expiry-checked",
+      timestamp: Date.now(),
+      data: {
+        status: expiryState.status,
+        ...(expiryState.status === "warning" ? { expAt: expiryState.expAt } : {}),
+        plannedSubmitAt: plannedSubmitAtMs,
+        headroomMs: RELOGIN_HEADROOM_MS,
       },
     });
   }
