@@ -2,7 +2,7 @@ import { EventEmitter } from "events";
 import { BrowserWindow, session, safeStorage, app } from "electron";
 import * as fs from "fs";
 import * as path from "path";
-import { maskToken, maskSensitive } from "../../shared/mask";
+import { maskToken, maskSensitive, maskEmail } from "../../shared/mask";
 import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/types";
 import {
   mapLoginFailure,
@@ -105,7 +105,7 @@ export class AuthService extends EventEmitter {
     const json = JSON.stringify({ email, password } satisfies StoredCredentials);
     const encrypted = safeStorage.encryptString(json);
     fs.writeFileSync(getCredentialsPath(), encrypted);
-    logService.info("AuthService", `credentials saved for ${email.slice(0, 3)}***`);
+    logService.info("AuthService", `credentials saved for ${maskEmail(email)}`);
   }
 
   clearCredentials(): void {
@@ -295,7 +295,7 @@ export class AuthService extends EventEmitter {
           };
         })();
       `) as { emailLen: number; pwLen: number };
-      logService.info("AuthService", `credentialLogin(headless): input state — email=${inputState.emailLen} chars, pw=${inputState.pwLen} chars`);
+      logService.info("AuthService", `credentialLogin(headless): input state — emailLen=${inputState.emailLen} chars, pwLen=${inputState.pwLen} chars`);
 
       // Wait for React state to update — poll until login button is enabled
       const btnEnabled = await win.webContents.executeJavaScript(`

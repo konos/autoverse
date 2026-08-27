@@ -34,6 +34,25 @@ export function maskName(name: string): string {
   return `${name[0]}${"*".repeat(name.length - 1)}`;
 }
 
+/**
+ * Mask email: local-part first char + asterisks, domain preserved (D-07, R010, IN-02).
+ * 도메인을 마스킹하지 않는 이유 — D-07 이 요구하는 저장 상태문("이 기기에 {마스킹된
+ * 이메일} 로그인 정보가...")은 사용자가 어느 계정인지 알아볼 수 있어야 쓸모가 있다.
+ * `"@"` 가 여러 개면 마지막 `"@"` 를 도메인 경계로 본다 — `maskName()` 과 동일한
+ * "빈 값/해석 불가 → 고정 문자열" 방어적 스타일을 따른다.
+ */
+export function maskEmail(email: string): string {
+  if (!email) return "***";
+  const atIndex = email.lastIndexOf("@");
+  if (atIndex === -1) return "***";
+  const local = email.slice(0, atIndex);
+  const domain = email.slice(atIndex + 1);
+  if (!local) return "***";
+  const maskedLocal =
+    local.length === 1 ? `${local}*` : `${local[0]}${"*".repeat(local.length - 1)}`;
+  return `${maskedLocal}@${domain}`;
+}
+
 // R010 sensitive field patterns (key=value style in serialized objects/logs)
 const SENSITIVE_PATTERNS: Array<[RegExp, (match: string, key: string, val: string) => string]> = [
   [/(Authorization:\s*)([^\s,}]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
@@ -63,6 +82,11 @@ const SENSITIVE_PATTERNS: Array<[RegExp, (match: string, key: string, val: strin
   [/(membershipNumber["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskMembershipNumber(v)}`],
   [/(firstName["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskName(v)}`],
   [/(lastName["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskName(v)}`],
+  // D-07/R010/IN-02 — 저장 상태문·로그로 이메일이 나갈 때 반드시 통과해야 하는
+  // 관문. 06-REVIEW IN-02 가 지적한 공백(이메일 전용 마스킹 규칙 부재)을 닫는다.
+  // 키 뒤에 곧바로 :/= 가 오는 경우만 매칭되므로 `emailLen=12` 같은 진단 로그는
+  // 훼손되지 않는다.
+  [/(email["']?\s*[:=]\s*["']?)([^"',}\s]+)/g, (_, k, v) => `${k}${maskEmail(v)}`],
   // 06-REVIEW WR-02 — 2차 방어선(구조 기반, 키 문맥 불필요). 위 13개 규칙은
   // 전부 `key["']?\s*[:=]` 형태의 키-값 문맥에 의존하므로, 서버가 임의 문장
   // 안에 토큰 형태 문자열을 섞어 돌려주면(키 이름 접두사 없이) 전부 통과시킨다.

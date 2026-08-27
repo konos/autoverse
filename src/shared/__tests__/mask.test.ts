@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { maskToken, maskPhone, maskBirthDate, maskMembershipNumber, maskName, maskSensitive } from "../mask";
+import { maskToken, maskPhone, maskBirthDate, maskMembershipNumber, maskName, maskEmail, maskSensitive } from "../mask";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +139,34 @@ describe("maskName", () => {
   });
 });
 
+// ── maskEmail (D-07 / R010 / IN-02) ──────────────────────────────────────────
+
+describe("maskEmail", () => {
+  it("local part → first char + asterisks, domain preserved", () => {
+    expect(maskEmail("kim@weverse.io")).toBe("k**@weverse.io");
+  });
+
+  it("single-char local part → char + one asterisk (maskName 단일 글자 관례와 동일)", () => {
+    expect(maskEmail("a@b.com")).toBe("a*@b.com");
+  });
+
+  it("empty string → ***", () => {
+    expect(maskEmail("")).toBe("***");
+  });
+
+  it("null 성 입력 → ***", () => {
+    expect(maskEmail(null as unknown as string)).toBe("***");
+  });
+
+  it("'@' 가 없는 문자열 → *** (이메일로 해석할 수 없으면 전부 가린다)", () => {
+    expect(maskEmail("not-an-email")).toBe("***");
+  });
+
+  it("'@' 가 여러 개면 마지막 '@' 를 도메인 경계로 본다", () => {
+    expect(maskEmail("a@b@c.com")).toBe("a**@c.com");
+  });
+});
+
 // ── maskSensitive ─────────────────────────────────────────────────────────────
 
 describe("maskSensitive", () => {
@@ -149,11 +177,21 @@ describe("maskSensitive", () => {
     expect(result).not.toContain("Bearer abcdefghijklmnopqrst1234567890uvwxyz");
   });
 
-  it("masks password value in a serialized object string (email preserved)", () => {
+  // D-07/R010/IN-02: 이메일 전용 마스킹 규칙 신설로 기대가 뒤집혔다 — 06 이
+  // otpSessionId 기대를 뒤집을 때 남긴 것과 같은 방식의 주석이다. 이 케이스는
+  // 예전에 "이메일은 보존된다"를 단언했으나, IN-02(06-REVIEW)가 지적한 공백을
+  // 닫기 위해 이메일도 이제 마스킹된 형태로 나가야 한다.
+  it("masks both password and email value in a serialized object string", () => {
     const text = '{"email":"a@b.com","password":"SuperSecret123!"}';
     const result = maskSensitive(text);
     expect(result).not.toContain("SuperSecret123!");
-    expect(result).toContain('"email":"a@b.com"');
+    expect(result).not.toContain('"email":"a@b.com"');
+    expect(result).toContain('"email":"a*@b.com"');
+  });
+
+  it("진단 로그(emailLen=12 pwLen=8)는 마스킹으로 훼손되지 않는다", () => {
+    const text = "emailLen=12 pwLen=8";
+    expect(maskSensitive(text)).toBe(text);
   });
 
   // Phase 05 재설계: 05-01 실측 결과 otpSessionId 필드는 세션 식별자가 아니라
