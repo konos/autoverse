@@ -205,7 +205,13 @@ This file is the explicit capability and coverage contract for the project.
 - Class: safety-guard
 - Status: active
 - Description: 신청 예정 시각 기준으로 토큰 잔여 수명을 확인해, 대기 중 만료가 예상되면 사전에 경고하고 재로그인을 유도한다.
-- Why it matters: API 모드는 OTP 때문에 자동 재로그인이 불가능하다. 대기 중 만료되면 이벤트를 통째로 놓친다. 사람이 개입할 시간을 미리 확보한다.
+- Why it matters: **[VOID — 2026-08-25 HAR 반증]** API 모드는 OTP 때문에 자동 재로그인이
+  불가능하다. 대기 중 만료되면 이벤트를 통째로 놓친다. 사람이 개입할 시간을 미리 확보한다.
+  **정정 — 2026-08-27, D-11(06):** 자동 재로그인이 불가능한 실제 이유는 OTP 가 아니라
+  reCAPTCHA 관문의 예측 불가능성과 Phase 06 D-03 의 무인 로그인 차단 정책이다. 또한 Phase 06
+  D-03 의 부수효과로 이 요구사항의 적용 범위가 API 모드 한정에서 두 로그인 모드 전체로
+  확대됐다. "대기 중 만료되면 이벤트를 통째로 놓친다 / 사람이 개입할 시간을 미리 확보한다"는
+  서술은 그대로 유효하다.
 - Source: user
 - Primary owning slice: v0.3.0/Phase 07
 - Validation: unmapped
@@ -216,7 +222,10 @@ This file is the explicit capability and coverage contract for the project.
 - Class: core-capability
 - Status: active
 - Description: API 모드에서도 이메일/비밀번호를 safeStorage로 암호화 저장해 재입력을 생략한다. OTP 코드는 저장하지 않는다.
-- Why it matters: 매번 OTP를 입력해야 하는 것만으로도 번거로운데 자격증명까지 재입력하면 실사용이 어렵다.
+- Why it matters: **[VOID — 2026-08-25 HAR 반증]** 매번 OTP를 입력해야 하는 것만으로도 번거로운데
+  자격증명까지 재입력하면 실사용이 어렵다.
+  **정정 — 2026-08-27, D-11(06):** OTP 입력 단계는 존재하지 않는다. 재입력 부담의 실체는 매
+  로그인마다 이메일과 비밀번호를 다시 타이핑해야 한다는 점이다.
 - Source: user
 - Primary owning slice: v0.3.0/Phase 07
 - Validation: unmapped
@@ -296,8 +305,8 @@ This file is the explicit capability and coverage contract for the project.
 | R019 | core-capability | validated | v0.3.0/Phase 05 | none | 2026-08-25 실계정 관측: rung1(직접 사용)이 계정 도메인 쿠키(JWT)로 /fans/me 200+fanId 확보 (근거: 05-SPIKE-RESULT.md). rung2(교환)는 미실행으로 여전히 미검증 |
 | R020 | failure-visibility | active | v0.3.0/Phase 06 | none | 2026-08-26 Phase 06 D-11 정정 — 반증 서술 VOID 마킹, 실제 매핑 대상으로 재정의 |
 | R021 | failure-visibility | active | v0.3.0/Phase 06 | none | 2026-08-26 Phase 06 D-11 정정 — 반증 서술 VOID 마킹, 실제 매핑 대상으로 재정의 |
-| R022 | safety-guard | active | v0.3.0/Phase 07 | none | unmapped |
-| R023 | core-capability | active | v0.3.0/Phase 07 | none | unmapped |
+| R022 | safety-guard | active | v0.3.0/Phase 07 | none | 2026-08-27 Phase 07 D-11(06) 정정 — 반증 서술(OTP) VOID 마킹, 실제 사유(reCAPTCHA/D-03)로 재정의, 적용 범위 두 모드 전체로 확대 |
+| R023 | core-capability | active | v0.3.0/Phase 07 | none | 2026-08-27 Phase 07 D-11(06) 정정 — 반증 서술(OTP) VOID 마킹, 실제 재입력 부담(이메일+비밀번호)으로 재정의 |
 
 ## Coverage Summary
 
