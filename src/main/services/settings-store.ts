@@ -52,8 +52,20 @@ function readSettings(): SettingsFile {
     return defaultSettings();
   }
 
+  // IN-01: 파일 읽기와 JSON 파싱을 별개 try/catch로 분리한다. 기존 코드는 둘을
+  // 한 catch에 묶어 로그가 원인과 무관하게 항상 "파싱 실패"라고 단정했다 — 읽기
+  // 자체가 실패한 경우(권한, 손상된 파일시스템 등)도 파싱 실패로 오인시켰다.
+  // 두 경우 모두 폴백 동작(defaultSettings())과 로그 레벨(warn)은 바꾸지
+  // 않는다 — 이 파일은 비민감 설정이라 "조용히 폴백"이 D-05/06 정책상 유효하다.
+  let raw: string;
   try {
-    const raw = fs.readFileSync(filePath, "utf-8");
+    raw = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    logService.warn("SettingsStore", `settings.json 읽기 실패 — 기본값(browser) 폴백: ${String(err)}`);
+    return defaultSettings();
+  }
+
+  try {
     const parsed = JSON.parse(raw) as Partial<SettingsFile>;
     return {
       schemaVersion: SETTINGS_SCHEMA_VERSION,
@@ -99,7 +111,19 @@ export class SettingsStore {
     return readSettings().loginMode;
   }
 
+  /**
+   * WR-04: 렌더러가 IPC로 보낸 값을 검증 없이 파일로 흘려보내던 경로를 닫는다.
+   * 검증 지점을 IPC 핸들러가 아니라 여기(저장 진입점) 안쪽에 둔 이유 — 핸들러
+   * 에만 두면 다른 호출 경로가 생겼을 때 다시 새지만, 저장 진입점에 두면 모든
+   * 경로가 한 관문을 지난다. `"api"`도 `"browser"`도 아니면 `writeSettings()`
+   * 를 호출하지 않고 throw한다 — `writeSettings()` 의 기존 정책("쓰기 실패는
+   * 삼키지 않고 호출자에게 전파한다")과 같은 방향이라, 렌더러는 06이 이미 만든
+   * 실패 배너 경로로 이 실패를 보게 된다.
+   */
   setLoginMode(mode: LoginMode): void {
+    if (mode !== "api" && mode !== "browser") {
+      throw new Error(`잘못된 로그인 모드: ${String(mode)}`);
+    }
     const current = readSettings();
     writeSettings({ ...current, loginMode: mode });
     logService.info("SettingsStore", `loginMode 저장: ${mode}`);

@@ -215,6 +215,69 @@ describe("SettingsStore.getNoticeAck — 손상된 JSON", () => {
   });
 });
 
+describe("SettingsStore.setLoginMode — 런타임 검증 (WR-04)", () => {
+  it('setLoginMode("nope") 는 throw하고 fs.writeFileSync 를 호출하지 않는다', () => {
+    const { store, dir } = makeStore();
+    const writeSpy = vi.mocked(fs.writeFileSync);
+    writeSpy.mockClear();
+
+    expect(() => store.setLoginMode("nope" as never)).toThrow("잘못된 로그인 모드");
+    expect(writeSpy).not.toHaveBeenCalled();
+
+    cleanup(dir);
+  });
+
+  it('setLoginMode("api") / setLoginMode("browser") 는 기존대로 저장된다', () => {
+    const { store, dir } = makeStore();
+
+    expect(() => store.setLoginMode("api")).not.toThrow();
+    expect(store.getLoginMode()).toBe("api");
+
+    expect(() => store.setLoginMode("browser")).not.toThrow();
+    expect(store.getLoginMode()).toBe("browser");
+
+    cleanup(dir);
+  });
+});
+
+describe("SettingsStore.getLoginMode — 읽기 실패와 파싱 실패의 로그 문구 구분 (IN-01)", () => {
+  it("fs.readFileSync 가 던지면 읽기 실패 문구를 남기고 기본값(browser)으로 폴백한다", () => {
+    const { store, dir } = makeStore();
+    const filePath = path.join(dir, "settings.json");
+    fs.writeFileSync(filePath, JSON.stringify({ schemaVersion: 1, loginMode: "api", apiModeNoticeAckedVersion: null }));
+
+    const readSpy = vi.spyOn(fs, "readFileSync").mockImplementationOnce(() => {
+      throw new Error("EACCES: permission denied");
+    });
+    const warnSpy = vi.spyOn(logService, "warn");
+
+    let mode: string | undefined;
+    expect(() => { mode = store.getLoginMode(); }).not.toThrow();
+    expect(mode).toBe("browser");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][1]).toContain("읽기 실패");
+
+    readSpy.mockRestore();
+    cleanup(dir);
+  });
+
+  it("파일 내용이 JSON이 아니면 파싱 실패 문구를 남기고 기본값(browser)으로 폴백한다", () => {
+    const { store, dir } = makeStore();
+    const filePath = path.join(dir, "settings.json");
+    fs.writeFileSync(filePath, "{ this is not valid json");
+
+    const warnSpy = vi.spyOn(logService, "warn");
+
+    let mode: string | undefined;
+    expect(() => { mode = store.getLoginMode(); }).not.toThrow();
+    expect(mode).toBe("browser");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][1]).toContain("파싱 실패");
+
+    cleanup(dir);
+  });
+});
+
 describe("SettingsStore.setLoginMode — 쓰기 실패 (UI-SPEC E1 error)", () => {
   it("fs.writeFileSync 가 던지면 setLoginMode() 도 그대로 던지고 디스크의 기존 값은 바뀌지 않는다", () => {
     const { store, dir } = makeStore();

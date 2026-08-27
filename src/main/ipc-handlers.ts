@@ -144,7 +144,10 @@ export function registerIpcHandlers(): void {
   // settings:get-login-mode — resolved mode (env override > persisted) + lock flag (D-06)
   ipcMain.handle("settings:get-login-mode", async () => settingsStore.getLoginModeSnapshot());
 
-  // settings:set-login-mode — persist the user-selected mode
+  // settings:set-login-mode — persist the user-selected mode. Runtime
+  // validation (WR-04) happens inside SettingsStore.setLoginMode() itself,
+  // not here — that keeps every call path (not just this IPC channel) behind
+  // one gate. Duplicating the check here would only drift out of sync.
   ipcMain.handle("settings:set-login-mode", async (_evt, mode: LoginMode) => {
     settingsStore.setLoginMode(mode);
   });
