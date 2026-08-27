@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 07
 current_phase_name: API 자격 증명 저장 + 토큰 만료 사전 경고
 status: executing
-stopped_at: Phase 07 context gathered
-last_updated: "2026-08-27T08:00:52.270Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-08-27T08:11:13.328Z"
 last_activity: 2026-08-27
-last_activity_desc: Phase 06 complete, transitioned to Phase 07
-state_head: ead8f3e4bfaece9f7521025678581265c1cf1aeb
+last_activity_desc: Phase 07 execution started
+state_head: d1a8dd1ae7b8e376d89ca97db887ac4533ab603c
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 18
-  completed_plans: 13
+  completed_plans: 14
   percent: 67
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-08-27)
 
 ## Current Position
 
-Phase: 07 (API 자격 증명 저장 + 토큰 만료 사전 경고) — READY TO EXECUTE
-Plan: Not started
+Phase: 07 (API 자격 증명 저장 + 토큰 만료 사전 경고) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-08-27 — Phase 06 complete, transitioned to Phase 07
+Last activity: 2026-08-27 — Phase 07 execution started
 
 **Phase 06 결과 (완료 2026-08-27):** 10개 플랜 + 3개 gap closure 플랜 전부 실행. R016/R020/R021 validated. UAT 48/48 통과(자동 커버 39 + 사람 확인 9), `06-SECURITY.md` 위협 44건 전부 CLOSED(`threats_open: 0`, accept 2건은 AR-01/AR-02 로 기록). 테스트 354개 green, typecheck 2종 + build green, 신규 의존성 0건. `06-REVIEW.md` 10개 발견 전부 처리 — WR-04/IN-01 은 Phase 07 로 이월, IN-04(모달 `max-height`)는 UAT Test 2 실행 확인으로 해소.
 
@@ -46,7 +46,7 @@ Last activity: 2026-08-27 — Phase 06 complete, transitioned to Phase 07
 구 05-01(halted)/05-02(blocked) 플랜은 폐기·대체됐다. 정본 근거: `.planning/phases/05-api/05-01-SUMMARY.md`,
 결정 사항: `.planning/phases/05-api/05-CONTEXT.md`
 
-Progress: [████████████████████] 13/13 plans (100%) · 페이즈 2/3 완료 (67%) — Phase 07 미계획
+Progress: [████████████████████] 13/13 plans ([███████░░░] 67%) · 페이즈 2/3 완료 (67%) — Phase 07 미계획
 
 ## Performance Metrics
 
@@ -88,6 +88,7 @@ Progress: [████████████████████] 13/13 p
 | Phase 06-ui P08 | 15min | 3 tasks | 6 files |
 | Phase 06-ui P09 | 7min | 3 tasks | 5 files |
 | Phase 06 P10 | 3min | 2 tasks | 4 files |
+| Phase 07 P01 | 15 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,9 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-10: SENSITIVE_PATTERNS에 문맥 무관 JWT 형태 2차 방어선 규칙 추가 — 06-REVIEW WR-02 Fix 제안(각 분절 10자 이상)을 채택하고 실제 계정 API 도메인/진단 로그로 역산 검증
 - [Phase 06]: 06-10: buildFailureResult()에 overrideMessage 4번째 선택 파라미터 추가 — btnEnabled 실패(WR-03)가 확정 문구를 유지한 채 마스킹 관문을 지나도록 재배선, 기존 5개 호출부는 후방 호환으로 무변경
 - [Phase 06]: 06-10: 헤드리스 디버그 덤프의 emailValue(이메일 원문)를 emailLen(길이)으로 교체(IN-02) — 06-REVIEW.md WR-02/WR-03/IN-02 전부 해소, phase 06의 10개 리뷰 발견 전부 처리 완료
+- [Phase 07]: [Phase 07-01] arm() 만료 판정은 syncTime() 재호출 없이 schema.applyPeriod.startAt 로컬 시각을 그대로 예정 시각으로 사용 — D-08 외부 호출 0 유지, arm() 시점엔 syncResult 가 아직 없음
+- [Phase 07]: [Phase 07-01] RELOGIN_HEADROOM_MS=180_000(3분) 단일 상수 — 헤드리스 로그인 폼 로드 15초+응답 대기 25초+캡차 시 사람 개입 여유를 흡수, 호출부 리터럴 재사용 금지
+- [Phase 07]: [Phase 07-01] 이 플랜의 재로그인 진입점은 기존 브라우저 로그인(handleLogin)만 배선 — API 모드 저장 자격증명 재로그인·재로그인 중 초기화 억제는 07-05로 이연
 
 ### Pending Todos
 
@@ -150,6 +154,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-27T07:14:31.937Z
-Stopped at: Phase 07 context gathered
-Resume file: .planning/phases/07-api/07-CONTEXT.md
+Last session: 2026-08-27T08:11:13.202Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None
