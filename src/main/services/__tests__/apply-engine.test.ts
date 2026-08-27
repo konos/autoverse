@@ -356,6 +356,95 @@ describe("ApplyEngine — execute() 안전 가드", () => {
   });
 });
 
+describe("ApplyEngine — execute() D-13 대기 이후 토큰 재조회", () => {
+  const NEW_TOKEN = "fresh-token-after-relogin-during-wait";
+
+  it("(a) 대기 중 토큰이 바뀌면 submitApplication이 새 토큰을 받는다", async () => {
+    const api = makeApi();
+    const timing = makeTiming({
+      waitUntilSubmitTime: vi.fn(async () => {
+        tokenBox.current = NEW_TOKEN;
+      }),
+    });
+    const engine = new ApplyEngine(api as never, timing as never);
+
+    await engine.fetchForm("EVENT001");
+    engine.arm([100], [1, 2]);
+    await engine.execute();
+
+    expect(api.submitApplication).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      NEW_TOKEN,
+      expect.any(String),
+      expect.anything(),
+    );
+  });
+
+  it("(b) 대기 중 토큰이 null(빈 문자열)이 되면 submitApplication을 호출하지 않고 UNAUTHORIZED로 실패한다", async () => {
+    const api = makeApi();
+    const timing = makeTiming({
+      waitUntilSubmitTime: vi.fn(async () => {
+        tokenBox.current = "";
+      }),
+    });
+    const engine = new ApplyEngine(api as never, timing as never);
+
+    await engine.fetchForm("EVENT001");
+    engine.arm([100], [1, 2]);
+
+    const errorEvents: string[] = [];
+    engine.on("apply-error", (e) => errorEvents.push(e.error?.code ?? ""));
+
+    await expect(engine.execute()).rejects.toThrow("로그인이 필요합니다");
+    expect(api.submitApplication).not.toHaveBeenCalled();
+    expect(errorEvents).toContain("UNAUTHORIZED");
+    expect(engine.getState().phase).toBe("error");
+  });
+
+  it("(c) 대기 중 토큰이 바뀌면 pollStatus도 새 토큰을 받는다", async () => {
+    const api = makeApi();
+    const timing = makeTiming({
+      waitUntilSubmitTime: vi.fn(async () => {
+        tokenBox.current = NEW_TOKEN;
+      }),
+    });
+    const engine = new ApplyEngine(api as never, timing as never);
+
+    await engine.fetchForm("EVENT001");
+    engine.arm([100], [1, 2]);
+    await engine.execute();
+
+    expect(api.pollStatus).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      NEW_TOKEN,
+    );
+  });
+
+  it("(d) 대기 중 토큰이 그대로면 기존 정상 경로가 변하지 않는다", async () => {
+    const api = makeApi();
+    const timing = makeTiming();
+    const engine = new ApplyEngine(api as never, timing as never);
+
+    await engine.fetchForm("EVENT001");
+    engine.arm([100], [1, 2]);
+    const result = await engine.execute();
+
+    expect(result.status).toBe("COMPLETED");
+    expect(api.submitApplication).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      DEFAULT_TEST_TOKEN,
+      expect.any(String),
+      expect.anything(),
+    );
+  });
+});
+
 describe("ApplyEngine — 폴링", () => {
   it("COMPLETED 상태 반환 시 성공", async () => {
     const api = makeApi({

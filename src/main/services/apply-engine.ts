@@ -221,6 +221,22 @@ export class ApplyEngine extends EventEmitter {
     // ── 3. Wait until submit time ─────────────────────────────────────────────
     await this.timing.waitUntilSubmitTime(submitTimeMs);
 
+    // ── D-13: 대기 이후 토큰 재조회 ─────────────────────────────────────────
+    // 대기 이전에 캡처한 `token`을 그대로 쓰면, 사용자가 대기 중 만료 경고를
+    // 보고 재로그인해도 그 결과가 실제 POST에 반영되지 않는다 — R022 전체가
+    // "경고는 뜨지만 아무것도 구하지 못하는" 기능이 된다. 여기서 다시 읽은
+    // `freshToken`이 payload 제출/결과 폴링/post-submitted 이벤트의 토큰
+    // 프리뷰에 쓰인다. `syncTime(token)` 호출은 실행 시작 시점의 `token`을
+    // 그대로 쓴다 — 시간 오프셋은 토큰 신원에 의존하지 않으므로 옮기지 않는다.
+    // 회귀를 막는 테스트: apply-engine.test.ts "execute() D-13 대기 이후 토큰
+    // 재조회".
+    const freshToken = authService.token;
+    if (!freshToken) {
+      this._emitError("execute", "UNAUTHORIZED", "로그인이 필요합니다");
+      this._setPhase("error");
+      throw new WeverseApiError("UNAUTHORIZED", "로그인이 필요합니다");
+    }
+
     // ── 4. Time guard check ───────────────────────────────────────────────────
     if (!this.timing.isTimeGuardPassed(startAt, syncResult)) {
       const msg = "시간 가드: startAt - 50ms 이전 POST 차단";
@@ -272,7 +288,7 @@ export class ApplyEngine extends EventEmitter {
         schema.applyHost,
         schema.artistCode,
         schema.eventPublicId,
-        token,
+        freshToken,
         schema.applyToken,
         payload,
       );
@@ -300,14 +316,14 @@ export class ApplyEngine extends EventEmitter {
         eventId: schema.eventPublicId,
         artistCode: schema.artistCode,
         serverDate: serverDateIso,
-        tokenPreview: maskToken(token),
+        tokenPreview: maskToken(freshToken),
       },
     });
 
     // ── 8. Poll for result ────────────────────────────────────────────────────
     this._setPhase("polling");
 
-    const result = await this._pollStatus(schema, token);
+    const result = await this._pollStatus(schema, freshToken);
 
     this._setPhase("completed");
 
