@@ -17,7 +17,7 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 
 **M001-ksbtje 완료 (2026-05-13), 이후 v0.2.0에서 로그인을 헤드리스 방식으로 전환.** 4개 슬라이스 전부 complete, 163개 단위 테스트 통과, tsc 오류 0, macOS .dmg 95MB + Windows .exe 84MB 아티팩트 생성 완료.
 
-**현재 v0.3.0 진행 중** — 클라이언트 요청으로 로그인 방식(API 통신 / 브라우저) 선택 기능 추가.
+**현재 v0.3.0 진행 중** — 클라이언트 요청으로 로그인 방식(API 통신 / 브라우저) 선택 기능 추가. Phase 05(R019 사다리 검증) · Phase 06(로그인 방식 선택 UI + 실패 안내) 완료, Phase 07(자격증명 저장 + 토큰 만료 사전 경고) 남음. **Phase 06 종료 시점 (2026-08-27):** 테스트 354개 green, typecheck 2종 + build green, 신규 의존성 0건, UAT 48/48 통과, 보안 위협 44건 전부 CLOSED(`threats_open: 0`).
 
 ## Current Milestone: v0.3.0 로그인 방식 선택 (API / 브라우저)
 
@@ -27,7 +27,7 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - ~~API 로그인 경로 신규 구현 — `otp-sessions` → `by-credentials` → `by-credentials-with-otp` 3단계~~ **[VOID 2026-08-25]** HAR 실측상 3단계 순서는 존재하지 않는다 (아래 계약 표 참조). 실제 경로는 `by-credentials` 단독 호출이며 reCAPTCHA Enterprise 토큰이 필수 입력이다
 - ~~이메일 OTP 입력 흐름 — API 모드는 매 로그인마다 OTP 필수~~ **[VOID 2026-08-25]** HAR 호출 0건 — OTP 단계 자체가 실제 로그인 흐름에 없다 (R018 보류). 근거: `.planning/phases/05-api/05-01-SUMMARY.md`
 - 토큰 교환 — account 토큰(`wa_access_token`) → 팬이벤트용 `we2_access_token`
-- 방식 선택 UI — 브라우저 모드 기본값, API는 선택 옵션
+- ✓ 방식 선택 UI — 브라우저 모드 기본값, API는 선택 옵션 **(Phase 06 완료)** — 차단형 고지 모달 · 환경변수 잠금 배지 · 6개 실패 사유 한국어 안내 포함
 - 토큰 만료 사전 경고 — 신청 시각 전 토큰 수명 체크 후 재로그인 유도
 
 **계정 API 계약 (2026-08-25 HAR 실측으로 정정):**
@@ -70,17 +70,17 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - ✓ R007 안전 가드 (시간 가드, 재시도 금지, 단일 계정, 로그 마스킹) — M001/S02
 - ✓ R009 약관 동의 명시적 사용자 확인 — M001/S02
 - ✓ R019 account 토큰 → 팬이벤트 토큰 교환 — v0.3.0 / Phase 05 (실계정 1회 관측: rung1 직접 사용이 계정 도메인 쿠키로 `/fans/me` 200+fanId 확보. **rung2(명시적 교환)는 미실행으로 여전히 미검증**)
+- ✓ R016 로그인 방식 선택 (API 통신 / 브라우저) — v0.3.0 / Phase 06 (`settings.json` 영속 + `AUTOVERSE_LOGIN_MODE` 잠금, UAT Test 1·4·7 실행 확인)
+- ✓ R020 API 로그인 실패 사유 한국어 안내 — v0.3.0 / Phase 06 (`mapLoginFailure()` 6개 신호 전수 매핑, UAT Test 8 실행 확인)
+- ✓ R021 API 모드 제약 사전 고지 — v0.3.0 / Phase 06 (차단형 `<dialog>` 고지 모달, UAT Test 1·2·3 실행 확인)
 
 ### Active
 
 - [ ] R006 실시간 동작 로그 패널 + 로그 파일 다운로드
 - [ ] R008 Windows .exe + macOS .dmg 크로스플랫폼 빌드 배포
 - [ ] R010 개인정보 로그 마스킹
-- [ ] R016 로그인 방식 선택 (API 통신 / 브라우저) — v0.3.0 / Phase 06
 - [ ] R017 API 자격증명 로그인 (실측 계약 — `by-credentials` 단독 + reCAPTCHA) — v0.3.0
 - [ ] R018 이메일 OTP 코드 입력 및 인증 — **보류 (blocked, Phase 매핑 해제)** — HAR 상 OTP 단계 부재로 미입증
-- [ ] R020 API 로그인 실패 사유 한국어 안내 — v0.3.0 / Phase 06
-- [ ] R021 API 모드 제약 사전 고지 — v0.3.0 / Phase 06
 - [ ] R022 신청 시각 전 토큰 수명 체크 및 재로그인 유도 — v0.3.0 / Phase 07
 - [ ] R023 API 모드 자격증명 암호화 저장 — v0.3.0 / Phase 07
 
@@ -113,6 +113,11 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 | [Phase 05] 반증된 계약을 삭제 대신 VOID 마킹으로 보존 | 틀린 전제가 코드보다 넓게 전파된다는 것을 05-01 이 실증했다 — 왜 틀렸는지를 남겨야 재발을 막는다 | ✓ Good |
 | [Phase 05] R019 는 1회 실계정 관측으로 판정 | 반복 가능한 자동 테스트로는 얻을 수 없는 신호이며, 반복 로그인은 계정 리스크를 키운다 | ✓ Good — rung1 성립 확인 |
 | [Phase 05] ApplyEngine 의 사다리 토큰 수용은 shape 수준 근거로 사인오프 | 실제 신청 시도는 라이브 FIFO 이벤트에 대한 되돌릴 수 없는 행위라 검증 비용이 리스크를 초과한다 | ⚠️ 잔여 리스크 — D-04 로 인수 |
+| [Phase 06] D-03: 무인 자동 로그인 차단을 브라우저 모드까지 확대 | 게이트 조건을 *모드*에서 *"외부에 로그인 요청을 발생시키는가"*로 재정의했다. 05-01 에서 모드 게이트 누락으로 저장된 타 계정에 헤드리스 로그인이 시도돼 실제 알림 메일이 발송된 사고가 근거다. ROADMAP Phase 06 SC1 의 의도적 편차 | ✓ Good — 쿠키 세션 복원은 유지해 재시작 경험 손실 없음 |
+| [Phase 06] D-02: 반증된 3단계 계정 API 로그인 코드를 주석 처리 대신 전면 삭제 | 반증된 경로가 코드에 남으면 재배선된다(T-06-13). 사용자가 확대 삭제를 명시 승인 | ✓ Good — 잔존 실행 경로 0건, typecheck 로 컴파일 타임 검출 |
+| [Phase 06] R021 고지를 비차단 배너가 아닌 네이티브 `<dialog>.showModal()` 차단형 모달로 구현 | "확인해야만 진행"이라는 요건은 비차단 표시로는 구조적으로 성립하지 않는다. 확인/취소 경로를 물리적으로 분리해 Esc 가 확인으로 오인되지 않게 한다 | ✓ Good — UAT Test 1·2·3 실행 확인 |
+| [Phase 06] 마스킹을 main 프로세스 단일 관문(`buildFailureResult()`/`_emit()`)으로 집중 | 렌더러가 재가공하면 이중 지점이 생겨 어느 쪽이 진실인지 모호해진다. 렌더러의 `maskSensitive` 호출 0건을 grep 게이트로 강제 | ✓ Good — T-06-06/17/24/34/35 CLOSED |
+| [Phase 06] CR-02 처치로 `maskSensitive()` 감싸기(A안) 대신 구조적 제거(B안) 채택 | `SENSITIVE_PATTERNS` 가 `key: value` 문맥에 의존해, 키 접두사 없는 토큰 문자열은 감싸도 통과한다. 서버 텍스트를 담을 수 없는 타입으로 봉인하는 편이 보장이 강하다 | ✓ Good — 문맥 무관 JWT 규칙을 2차 방어선으로 추가(06-10) |
 
 ## Known Limitations (Post-M001)
 
@@ -121,6 +126,7 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - 자동 업데이트 미구현 — 신버전 시 수동 재설치 필요.
 - 로그 파일 로테이션 미구현 — 장기 운영 시 디스크 사용량 증가 가능성.
 - Electron 런타임 종단 E2E 미수행 — 실제 이벤트 환경에서의 검증 예정.
+- `06-VALIDATION.md` / `06-07-PLAN.md` 의 수동 검증 지시문이 존재하지 않는 `npm run dev` 스크립트를 가리킨다 (실제 명령은 `npm start`). Phase 06 UAT Test 9 에서 발견, 문구 정정은 후속 작업.
 
 ## Evolution
 
@@ -140,4 +146,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-25 after Phase 05*
+*Last updated: 2026-08-27 after Phase 06*

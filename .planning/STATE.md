@@ -2,39 +2,41 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
-current_phase: 06
-current_phase_name: 로그인 방식 선택 UI + 실패 안내
-status: executing
-stopped_at: Completed 06-10-PLAN.md
-last_updated: "2026-08-26T07:58:21.703Z"
-last_activity: 2026-08-26
-last_activity_desc: Phase 06 execution started
-state_head: 3ea8292b9c32713d46e05cf3cbb9060e220276c6
+current_phase: 07
+current_phase_name: API 자격 증명 저장 + 토큰 만료 사전 경고
+status: planning
+stopped_at: Phase 06 complete, ready to plan Phase 07
+last_updated: "2026-08-27T06:40:57.649Z"
+last_activity: 2026-08-27
+last_activity_desc: Phase 06 complete, transitioned to Phase 07
+state_head: c199eda1004d89a6d68146974d307f23345697fa
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 13
   completed_plans: 13
-  percent: 33
+  percent: 67
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-25)
+See: .planning/PROJECT.md (updated 2026-08-27)
 
 **Core value:** 서버 시간 보정 + RTT 반영으로 선착순 이벤트 신청 POST가 정시에 서버에 도착하는 것.
-**Current focus:** Phase 06 — 로그인 방식 선택 UI + 실패 안내
+**Current focus:** Phase 07 — API 자격 증명 저장 + 토큰 만료 사전 경고
 
 ## Current Position
 
-Phase: 06 (로그인 방식 선택 UI + 실패 안내) — EXECUTING
-Plan: 4 of 10
-Status: Ready to execute
-Last activity: 2026-08-26 — Phase 06 execution started
+Phase: 07 — API 자격 증명 저장 + 토큰 만료 사전 경고
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-27 — Phase 06 complete, transitioned to Phase 07
 
-**Phase 05 결과 (완료 2026-08-25):** R019 사다리는 **rung1(직접 사용)이 실계정에서 성립**함을 1회 관측으로 확인했다 (계정 도메인 쿠키 JWT → `/fans/me` 200 + fanId). rung2(명시적 교환)는 미실행으로 여전히 미검증이다. 로그인 방식 최종 결정(D-04)은 Phase 06 에서 이 결과를 근거로 내린다.
+**Phase 06 결과 (완료 2026-08-27):** 10개 플랜 + 3개 gap closure 플랜 전부 실행. R016/R020/R021 validated. UAT 48/48 통과(자동 커버 39 + 사람 확인 9), `06-SECURITY.md` 위협 44건 전부 CLOSED(`threats_open: 0`, accept 2건은 AR-01/AR-02 로 기록). 테스트 354개 green, typecheck 2종 + build green, 신규 의존성 0건. `06-REVIEW.md` 10개 발견 전부 처리 — WR-04/IN-01 은 Phase 07 로 이월, IN-04(모달 `max-height`)는 UAT Test 2 실행 확인으로 해소.
+
+**Phase 05 결과 (완료 2026-08-25):** R019 사다리는 **rung1(직접 사용)이 실계정에서 성립**함을 1회 관측으로 확인했다 (계정 도메인 쿠키 JWT → `/fans/me` 200 + fanId). rung2(명시적 교환)는 미실행으로 여전히 미검증이다. 로그인 방식 최종 결정(D-04)은 Phase 06 에서 내려졌다 — 브라우저 기본값 유지, API 는 차단형 고지 후 선택.
 
 **배경 (유지):** 구 halt 사유(`POST /v4/auth/token/by-credentials` 의 `otpSessionId` 필드가 OTP
 세션 ID 가 아니라 reCAPTCHA Enterprise 토큰이며 실제 로그인 흐름에 OTP 단계가 없다는 HAR 증거)는
@@ -44,13 +46,13 @@ Last activity: 2026-08-26 — Phase 06 execution started
 구 05-01(halted)/05-02(blocked) 플랜은 폐기·대체됐다. 정본 근거: `.planning/phases/05-api/05-01-SUMMARY.md`,
 결정 사항: `.planning/phases/05-api/05-CONTEXT.md`
 
-Progress: [███░░░░░░░] 33%
+Progress: [████████████████████] 13/13 plans (100%) · 페이즈 2/3 완료 (67%) — Phase 07 미계획
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3 (v0.3.0 기준)
+- Total plans completed: 13 (v0.3.0 기준)
 - Average duration: —
 - Total execution time: —
 
@@ -61,6 +63,7 @@ Progress: [███░░░░░░░] 33%
 | 01-04 (M001-ksbtje) | — | — | — |
 | 05-07 (v0.3.0) | 0 | 0 | — |
 | 05 | 3 | - | - |
+| 06 | 10 | - | - |
 
 **Recent Trend:**
 
@@ -134,6 +137,9 @@ None yet.
 - ⚠️ [Phase 05] **ApplyEngine 의 사다리 토큰 수용이 행동 수준으로 미검증** — shape 수준 근거로 사인오프했다. D-04(로그인 방식 최종 결정)가 이 전제 위에 놓인다.
 - ⚠️ [Phase 05] **운영 조치 미완:** 실계정 관측 당시 기록된 실토큰이 `~/Library/Application Support/weverse-fanevent-apply/logs/2026-08-25.log` 에 평문으로 남아 있다. T-05-17 수정은 소급 적용되지 않으므로 사용자가 직접 정리해야 한다.
 
+- [Phase 06] **리뷰 이월 2건 → Phase 07:** WR-04(설정 IPC 런타임 검증)와 IN-01(설정 읽기 오류 로그 문구). 근거는 각 PLAN 의 `<review_disposition>`.
+- [Phase 06] **문서 결함:** `06-VALIDATION.md` / `06-07-PLAN.md` 의 수동 검증 지시문이 존재하지 않는 `npm run dev` 를 가리킨다(실제 명령 `npm start`). UAT Test 9 에서 발견, 사용자 판단으로 pass 처리하고 문구 정정은 후속 작업으로 남겼다.
+
 *해소됨:* ~~R019 (account → we2_access_token 교환) 미검증~~ — 2026-08-25 실계정 1회 관측으로 rung1 성립 확인 (부분 해소, rung2 는 위에 잔존).
 
 ## Deferred Items
@@ -144,6 +150,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T07:58:21.635Z
-Stopped at: Completed 06-10-PLAN.md
+Last session: 2026-08-27
+Stopped at: Phase 06 complete, ready to plan Phase 07
 Resume file: None
