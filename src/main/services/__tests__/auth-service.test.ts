@@ -727,6 +727,209 @@ describe("AuthService.buildLadderFailureEvent — 사다리 실패가 사용자�
   });
 });
 
+// ── getStoredCredentialsSnapshot (D-04 4상태 계약) ───────────────────────────
+
+describe("AuthService.getStoredCredentialsSnapshot — D-04 4상태 계약", () => {
+  beforeEach(() => {
+    clearStoredCredentialsFile();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearStoredCredentialsFile();
+  });
+
+  it("파일 없음 → none", () => {
+    const service = new AuthService();
+    expect(service.getStoredCredentialsSnapshot()).toEqual({ state: "none" });
+  });
+
+  it("정상 파일 → available + 저장 이메일, 반환 객체에 password 키가 없다", () => {
+    writeStoredCredentials("stored@example.com", "stored-pw");
+    const service = new AuthService();
+
+    const snapshot = service.getStoredCredentialsSnapshot();
+
+    expect(snapshot).toEqual({ state: "available", email: "stored@example.com" });
+    expect("password" in snapshot).toBe(false);
+  });
+
+  it("safeStorage.isEncryptionAvailable() 이 false 면 unavailable 이고 파일이 여전히 존재한다", async () => {
+    writeStoredCredentials("stored@example.com", "stored-pw");
+    const electron = await import("electron");
+    vi.mocked(electron.safeStorage.isEncryptionAvailable).mockReturnValueOnce(false);
+    const service = new AuthService();
+
+    const snapshot = service.getStoredCredentialsSnapshot();
+
+    expect(snapshot).toEqual({ state: "unavailable" });
+    expect(fs.existsSync(TEST_CREDENTIALS_PATH)).toBe(true);
+  });
+
+  it("복호화가 throw 하면 corrupted 이고 파일이 삭제된다", async () => {
+    writeStoredCredentials("stored@example.com", "stored-pw");
+    const electron = await import("electron");
+    vi.mocked(electron.safeStorage.decryptString).mockImplementationOnce(() => {
+      throw new Error("decrypt failed");
+    });
+    const service = new AuthService();
+
+    const snapshot = service.getStoredCredentialsSnapshot();
+
+    expect(snapshot).toEqual({ state: "corrupted" });
+    expect(fs.existsSync(TEST_CREDENTIALS_PATH)).toBe(false);
+  });
+
+  it("JSON 이 아닌 평문을 써 두면 corrupted + 파일 삭제", () => {
+    fs.mkdirSync("/tmp/test-userData", { recursive: true });
+    fs.writeFileSync(TEST_CREDENTIALS_PATH, Buffer.from("not-json-at-all"));
+    const service = new AuthService();
+
+    const snapshot = service.getStoredCredentialsSnapshot();
+
+    expect(snapshot).toEqual({ state: "corrupted" });
+    expect(fs.existsSync(TEST_CREDENTIALS_PATH)).toBe(false);
+  });
+
+  it("email 필드가 문자열이 아니면 corrupted + 파일 삭제", () => {
+    fs.mkdirSync("/tmp/test-userData", { recursive: true });
+    fs.writeFileSync(
+      TEST_CREDENTIALS_PATH,
+      Buffer.from(JSON.stringify({ email: 12345, password: "pw" })),
+    );
+    const service = new AuthService();
+
+    const snapshot = service.getStoredCredentialsSnapshot();
+
+    expect(snapshot).toEqual({ state: "corrupted" });
+    expect(fs.existsSync(TEST_CREDENTIALS_PATH)).toBe(false);
+  });
+});
+
+// ── loginWithStoredCredentials — D-03 최종 게이트 (main 이 다시 비교) ────────
+
+describe("AuthService.loginWithStoredCredentials — D-01/D-03 게이트", () => {
+  beforeEach(() => {
+    clearStoredCredentialsFile();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearStoredCredentialsFile();
+  });
+
+  it("저장 이메일과 다른 이메일 → success:false, credentialLogin 은 호출되지 않는다 (외부 요청 0건)", async () => {
+    writeStoredCredentials("stored@example.com", "stored-pw");
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await service.loginWithStoredCredentials("other@example.com");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("다른 계정입니다");
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+
+  it("대소문자/공백만 다른 이메일은 일치로 취급돼 게이트를 통과한다 (credentialLogin 호출됨)", async () => {
+    writeStoredCredentials("stored@example.com", "stored-pw");
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin").mockResolvedValue({ success: true });
+
+    const result = await service.loginWithStoredCredentials("  Stored@Example.com  ");
+
+    expect(result.success).toBe(true);
+    expect(credentialLoginSpy).toHaveBeenCalledWith("stored@example.com", "stored-pw");
+  });
+
+  it("저장된 자격증명이 없으면(none) 외부 요청 없이 실패를 반환한다", async () => {
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await service.loginWithStoredCredentials("anyone@example.com");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("저장된 로그인 정보가 없습니다");
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+
+  it("safeStorage 불가(unavailable) 상태에서는 외부 요청 없이 실패를 반환한다", async () => {
+    writeStoredCredentials("stored@example.com", "stored-pw");
+    const electron = await import("electron");
+    vi.mocked(electron.safeStorage.isEncryptionAvailable).mockReturnValueOnce(false);
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await service.loginWithStoredCredentials("stored@example.com");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("이 환경에서는 저장된 정보를 사용할 수 없습니다");
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+
+  it("손상된(corrupted) 파일 상태에서는 외부 요청 없이 실패를 반환한다", async () => {
+    fs.mkdirSync("/tmp/test-userData", { recursive: true });
+    fs.writeFileSync(TEST_CREDENTIALS_PATH, Buffer.from("not-json-at-all"));
+    const service = new AuthService();
+    const credentialLoginSpy = vi.spyOn(service, "credentialLogin");
+
+    const result = await service.loginWithStoredCredentials("anyone@example.com");
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("초기화했습니다");
+    expect(credentialLoginSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── credentialLogin 중복 실행 가드 (T-07-09) ────────────────────────────────
+
+describe("AuthService.credentialLogin — 중복 실행 가드 (T-07-09)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeFakeLoginWindow() {
+    return {
+      loadURL: vi.fn(async () => {}),
+      webContents: {
+        // 로그인 폼 대기 단계에서 영원히 대기하게 만들어 첫 호출을 "진행 중"
+        // 상태로 유지한다 — 두 번째 호출이 가드에 막히는지만 검증하면 된다.
+        executeJavaScript: vi.fn(() => new Promise(() => {})),
+        insertText: vi.fn(async () => {}),
+        on: vi.fn(),
+        debugger: {
+          attach: vi.fn(),
+          on: vi.fn(),
+          sendCommand: vi.fn(async () => ({})),
+        },
+      },
+      isDestroyed: vi.fn(() => false),
+      close: vi.fn(),
+    };
+  }
+
+  it("이미 진행 중인 호출이 있으면 두 번째 호출이 즉시 실패를 반환하고 BrowserWindow 는 1회만 생성된다", async () => {
+    cookieFixtureBox.current = [];
+    // `new BrowserWindow(...)` requires a constructible mock implementation —
+    // an arrow function cannot be invoked with `new`.
+    vi.mocked(BrowserWindow).mockImplementation(function (this: unknown) {
+      return makeFakeLoginWindow() as unknown as BrowserWindow;
+    } as unknown as typeof BrowserWindow);
+    const service = new AuthService();
+
+    const first = service.credentialLogin("a@b.com", "pw"); // 의도적으로 await 하지 않음 — in-flight 로 남긴다
+    const second = await service.credentialLogin("a@b.com", "pw");
+
+    expect(second.success).toBe(false);
+    expect(second.message).toContain("이미 진행 중입니다");
+
+    // 첫 호출이 BrowserWindow 생성 지점까지 진행할 시간을 준다 (실제 타이머 없음, 마이크로태스크만 흐름)
+    await new Promise((r) => setTimeout(r, 20));
+    expect(vi.mocked(BrowserWindow).mock.calls.length).toBe(1);
+
+    void first; // 의도적으로 미해결 상태로 둔다 — 이 테스트의 관심사가 아니다
+  });
+});
+
 // ── validateToken() 실패 emit 관문 (Task 2, 06-VERIFICATION.md gap 2 / CR-02) ──
 //
 // 두 로그인 모드가 공유하는 validateToken() 의 네 실패 지점이 서버 응답 원문을 더 이상

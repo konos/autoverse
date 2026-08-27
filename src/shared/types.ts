@@ -250,6 +250,23 @@ export interface AuthStatus {
   hasStoredCredentials?: boolean;
 }
 
+/**
+ * `AuthService.getStoredCredentialsSnapshot()` 의 4상태 반환 계약(D-04). 이 타입은
+ * main → renderer IPC 경계를 넘는 계약이며, `password` 를 담는 갈래가 존재하지
+ * 않는다는 것 자체가 D-01 의 구조적 보장이다 — 복호화된 비밀번호가 이 타입을 통해
+ * 렌더러로 나갈 수 있는 경로 자체가 타입 수준에서 없다.
+ *
+ * - `"none"`: `credentials.enc` 파일이 없다.
+ * - `"available"`: 정상 복호화됨 — 저장된 이메일만 노출한다.
+ * - `"corrupted"`: 복호화/파싱 실패 — 파일은 이미 삭제된 상태다.
+ * - `"unavailable"`: `safeStorage` 자체를 쓸 수 없는 환경 — 파일은 보존된다.
+ */
+export type StoredCredentialsSnapshot =
+  | { state: "none" }
+  | { state: "available"; email: string }
+  | { state: "corrupted" }
+  | { state: "unavailable" };
+
 export interface Profile {
   fanId: number;
   phone?: string; // stored encrypted, never logged

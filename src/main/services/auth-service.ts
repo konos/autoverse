@@ -3,7 +3,12 @@ import { BrowserWindow, session, safeStorage, app } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 import { maskToken, maskSensitive, maskEmail } from "../../shared/mask";
-import type { AuthStatus, AuthEvent, CredentialLoginResult } from "../../shared/types";
+import type {
+  AuthStatus,
+  AuthEvent,
+  CredentialLoginResult,
+  StoredCredentialsSnapshot,
+} from "../../shared/types";
 import {
   mapLoginFailure,
   classifyCredentialLoginSignal,
@@ -63,6 +68,10 @@ export class AuthService extends EventEmitter {
   private loginWindow: BrowserWindow | null = null;
   private autoReloginInProgress = false;
 
+  // T-07-09 — 연속 클릭이 헤드리스 창을 중복으로 열지 않게 막는 가드. 외부에
+  // 부수효과(알림 메일 등)가 있는 요청이라 멱등하지 않으므로, 앱이 직접 억제한다.
+  private credentialLoginInFlight = false;
+
   // Headless login state
   private headlessWindow: BrowserWindow | null = null;
 
@@ -118,6 +127,144 @@ export class AuthService extends EventEmitter {
 
   hasStoredCredentials(): boolean {
     return fs.existsSync(getCredentialsPath());
+  }
+
+  /**
+   * `credentials.enc` 의 단일 읽기 지점(D-04) — 복호화를 한 번만 수행하고
+   * 공개용 스냅샷과 내부용 비밀번호를 분리해 돌려준다. `ProfileStore.getProfile()`
+   * 의 삭제+throw 선례를 따르되, IPC 경계를 넘어야 하므로 throw 대신 상태
+   * 반환으로 바꾼다 — 어떤 경우에도 예외를 던지지 않는다.
+   *
+   * - safeStorage 자체가 불가한 환경은 파일을 삭제하지 않는다(키체인이 돌아올
+   *   수 있다) — "unavailable" 로만 안내한다.
+   * - 읽기/복호화/JSON 파싱 실패, 또는 email 필드가 문자열이 아니면 손상으로
+   *   판정해 `clearCredentials()` 로 파일을 삭제한다(삭제 로직을 새로 만들지
+   *   않는다) — "corrupted" 로 안내한다.
+   */
+  private readStoredCredentials(): {
+    snapshot: StoredCredentialsSnapshot;
+    password: string | null;
+  } {
+    const filePath = getCredentialsPath();
+    if (!fs.existsSync(filePath)) {
+      return { snapshot: { state: "none" }, password: null };
+    }
+
+    if (!safeStorage.isEncryptionAvailable()) {
+      logService.warn(
+        "AuthService",
+        "credentials 읽기: safeStorage 사용 불가 — 파일은 보존하고 사용 불가로만 안내",
+      );
+      return { snapshot: { state: "unavailable" }, password: null };
+    }
+
+    let buffer: Buffer;
+    try {
+      buffer = fs.readFileSync(filePath);
+    } catch (err) {
+      logService.error("AuthService", `credentials 파일 읽기 실패 — 삭제 후 재입력 필요: ${String(err)}`);
+      this.clearCredentials();
+      return { snapshot: { state: "corrupted" }, password: null };
+    }
+
+    let json: string;
+    try {
+      json = safeStorage.decryptString(buffer);
+    } catch (err) {
+      logService.error("AuthService", `credentials 복호화 실패 — 삭제 후 재입력 필요: ${String(err)}`);
+      this.clearCredentials();
+      return { snapshot: { state: "corrupted" }, password: null };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json);
+    } catch (err) {
+      logService.error("AuthService", `credentials JSON 파싱 실패 — 삭제 후 재입력 필요: ${String(err)}`);
+      this.clearCredentials();
+      return { snapshot: { state: "corrupted" }, password: null };
+    }
+
+    const candidate = parsed as Partial<StoredCredentials>;
+    if (typeof candidate.email !== "string" || typeof candidate.password !== "string") {
+      logService.error("AuthService", "credentials 필드 형식 불일치 — 삭제 후 재입력 필요");
+      this.clearCredentials();
+      return { snapshot: { state: "corrupted" }, password: null };
+    }
+
+    return {
+      snapshot: { state: "available", email: candidate.email },
+      password: candidate.password,
+    };
+  }
+
+  /**
+   * D-04 4상태 계약의 공개 창구 — `password` 를 이 메서드 밖으로 내보내는 경로를
+   * 만들지 않는다. 어떤 경우에도 throw 하지 않는다(IPC 핸들러가 그대로 렌더러에
+   * 넘길 수 있어야 한다).
+   */
+  getStoredCredentialsSnapshot(): StoredCredentialsSnapshot {
+    return this.readStoredCredentials().snapshot;
+  }
+
+  /**
+   * 저장된 비밀번호로 로그인한다(D-01/D-02/D-03). 입력 이메일이 저장 이메일과
+   * 다르면 **외부 요청 없이** — `credentialLogin()` 을 호출하지 않고 — 그 자리에서
+   * 실패를 반환한다.
+   *
+   * 이 게이트가 렌더러의 버튼 `disabled` 상태와 독립적으로, main 프로세스 안에서
+   * 다시 수행돼야 하는 이유: WR-03(06-REVIEW)에서 버튼 비활성 실패가 렌더러 쪽
+   * 관문을 우회한 실제 발견이 있었고, 05-01 에서는 저장된 *다른* 계정에 헤드리스
+   * 로그인이 나가 실제 알림 메일이 발송된 사고가 있었다. 이 메서드는 사용자 클릭
+   * 에서만 호출되는 IPC 경로 전용이며, `tryAutoLogin()`/`trySessionRestore()` 의
+   * 무인 로그인 차단을 우회하지 않는다 — D-03(06) 은 그대로 유지된다.
+   *
+   * 반환되는 `CredentialLoginResult` 에는 어떤 경우에도 비밀번호가 담기지 않는다.
+   */
+  async loginWithStoredCredentials(inputEmail: string): Promise<CredentialLoginResult> {
+    const { snapshot, password } = this.readStoredCredentials();
+
+    if (snapshot.state === "none") {
+      return this.buildFailureResult(
+        null,
+        "unknown",
+        undefined,
+        "저장된 로그인 정보가 없습니다 — 비밀번호를 입력해주세요.",
+      );
+    }
+
+    if (snapshot.state === "unavailable") {
+      return this.buildFailureResult(
+        null,
+        "unknown",
+        undefined,
+        "이 환경에서는 저장된 정보를 사용할 수 없습니다 — 비밀번호를 입력해주세요.",
+      );
+    }
+
+    if (snapshot.state === "corrupted") {
+      return this.buildFailureResult(
+        null,
+        "unknown",
+        undefined,
+        "저장된 로그인 정보를 읽지 못해 초기화했습니다 — 다시 입력해주세요.",
+      );
+    }
+
+    // snapshot.state === "available" — D-03 최종 게이트. 정규화(trim + 소문자)
+    // 비교에서 불일치하면 credentialLogin() 을 호출하지 않는다.
+    const normalizedInput = inputEmail.trim().toLowerCase();
+    const normalizedStored = snapshot.email.trim().toLowerCase();
+    if (normalizedInput !== normalizedStored) {
+      return this.buildFailureResult(
+        null,
+        "unknown",
+        undefined,
+        "다른 계정입니다 — 비밀번호를 입력하세요.",
+      );
+    }
+
+    return this.credentialLogin(snapshot.email, password as string);
   }
 
   // ── Logout ──────────────────────────────────────────────────────────────
@@ -210,6 +357,20 @@ export class AuthService extends EventEmitter {
    * fills email/password via DOM injection, waits for OTP if needed.
    */
   async credentialLogin(email: string, password: string): Promise<CredentialLoginResult> {
+    // T-07-09 in-flight 가드 — 헤드리스 창을 열기 전에 반환해야 연속 클릭이
+    // 중복 헤드리스 로그인 요청을 Weverse 로 내보내지 않는다(외부에 부수효과가
+    // 있는 요청이라 멱등하지 않다). 해제는 finally 로만 보장한다 — 이 메서드는
+    // return 지점이 여러 개다.
+    if (this.credentialLoginInFlight) {
+      return this.buildFailureResult(
+        null,
+        "unknown",
+        undefined,
+        "로그인이 이미 진행 중입니다.",
+      );
+    }
+    this.credentialLoginInFlight = true;
+    try {
     logService.info("AuthService", "credentialLogin(headless): starting");
     this._emit({ type: "credential-login-progress", message: "로그인 시도 중...", timestamp: Date.now() });
 
@@ -474,6 +635,9 @@ export class AuthService extends EventEmitter {
       this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
       this.cleanupHeadless();
       return failureResult;
+    }
+    } finally {
+      this.credentialLoginInFlight = false;
     }
   }
 
