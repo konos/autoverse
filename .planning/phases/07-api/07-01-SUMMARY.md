@@ -158,6 +158,17 @@ None - no external service configuration required.
 - **`<human-check>` 미실행** — Task 07-01-02의 수동 UAT(실제 arm → 대기 화면 → 배너/카운트다운/재로그인 버튼 클릭 확인)는 vitest 대상 밖(.tsx 제외)이라 이 플랜에서 실행하지 않았다. 정적 검사(타입/린트/단위 테스트)는 전부 통과했으나, 실제 화면 렌더링 확인은 phase 07 UAT 단계로 이월한다.
 - **blocker 없음.** `npm test` 375/375 green(기존 354 + 신규 21), `npm run typecheck`/`typecheck:main` 둘 다 exit 0, `grep -c "this.timing.syncTime"` = 1 확인.
 
+## Self-Check: PASSED
+
+- `src/shared/token-expiry.ts` — FOUND
+- `src/shared/__tests__/token-expiry.test.ts` — FOUND
+- `src/renderer/components/apply-execution-view.ts` — FOUND
+- `src/renderer/components/__tests__/apply-execution-view.test.ts` — FOUND
+- Commit `b60cebb` (Task 07-01-01) — FOUND in `git log --oneline --all`
+- Commit `d867de3` (Task 07-01-02) — FOUND in `git log --oneline --all`
+- All plan `<acceptance_criteria>` re-verified: pass (grep checks for exported symbols, `RELOGIN_HEADROOM_MS` single-source, `ApplyEventType` member, `syncTime` call count = 1)
+- Plan-level `<verification>`: `npm test` 375/375 pass, `npm run typecheck` exit 0, `npm run typecheck:main` exit 0, `grep -c "this.timing.syncTime"` = 1, no `disabled` attribute references expiry state
+
 ---
 *Phase: 07-api*
 *Completed: 2026-08-27*
