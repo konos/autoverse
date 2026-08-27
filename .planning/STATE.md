@@ -4,17 +4,17 @@ milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 07
 current_phase_name: API 자격 증명 저장 + 토큰 만료 사전 경고
-status: executing
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-08-27T08:40:29.312Z"
+status: verifying
+stopped_at: Completed 07-05-PLAN.md
+last_updated: "2026-08-27T08:49:40.557Z"
 last_activity: 2026-08-27
 last_activity_desc: Phase 07 execution started
-state_head: d4bb66086267d8d48a354863063a09202b0b110c
+state_head: 3d17c6be6e1bd16bd780d32aad111cc7fc28c472
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 18
-  completed_plans: 17
+  completed_plans: 18
   percent: 67
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-27)
 
 Phase: 07 (API 자격 증명 저장 + 토큰 만료 사전 경고) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-27 — Phase 07 execution started
 
 **Phase 06 결과 (완료 2026-08-27):** 10개 플랜 + 3개 gap closure 플랜 전부 실행. R016/R020/R021 validated. UAT 48/48 통과(자동 커버 39 + 사람 확인 9), `06-SECURITY.md` 위협 44건 전부 CLOSED(`threats_open: 0`, accept 2건은 AR-01/AR-02 로 기록). 테스트 354개 green, typecheck 2종 + build green, 신규 의존성 0건. `06-REVIEW.md` 10개 발견 전부 처리 — WR-04/IN-01 은 Phase 07 로 이월, IN-04(모달 `max-height`)는 UAT Test 2 실행 확인으로 해소.
@@ -92,6 +92,7 @@ Progress: [████████████████████] 13/13 p
 | Phase 07 P02 | ~20min | 3 tasks | 5 files |
 | Phase 07 P03 | ~25min | 3 tasks | 7 files |
 | Phase 07 P04 | ~15min | 2 tasks | 3 files |
+| Phase 07 P05 | ~20min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,9 @@ Recent decisions affecting current work:
 - [Phase 07]: [Phase 07] WR-04/IN-01 이월 항목 폐쇄 — SettingsStore.setLoginMode() 저장 진입점 런타임 검증, readSettings() 읽기/파싱 원인 분리 로그
 - [Phase 07]: [Phase 07] resolveStoredLoginState() 순수 함수로 저장 자격증명 4상태 x 이메일 일치 여부 화면 판단을 단일 지점에 고정 — corrupted/unavailable 삭제 버튼 노출 여부를 구조적으로 구분(D-04/D-06)
 - [Phase 07]: [Phase 07] LoginPanel.tsx의 '로그아웃 + 자격 증명 삭제' 버튼을 제거하고 삭제 통제권을 로그인 여부와 무관한 D-07 상태문 자리로 통합 — 두 버튼이 겹치는 상태를 남기지 않음(D-06)
+- [Phase 07]: [Phase 07] onAuthEvent 구독이 마운트 1회성 useEffect([]) 안이라 step 클로저가 스테일한 문제를 발견 — decideAuthEventNavigation()에 stepRef.current(useRef+동기화 useEffect)를 넘기도록 수정하지 않으면 apply-execution 판정이 실전에서 절대 참이 되지 않아 Pitfall 3 해소가 무효화됨(Rule 1 자동수정)
+- [Phase 07]: [Phase 07] handleReloginFromWaiting()의 API 모드 저장 자격증명 상태별 안내 문구는 07-04(resolveStoredLoginState)의 corrupted/unavailable 문구를 재사용하고, 대기 화면에만 있는 none 케이스만 새로 작성
+- [Phase 07]: [Phase 07] ROADMAP SC1/REQUIREMENTS R022·R023 Why it matters의 반증된 OTP 서술을 D-11(06) 절차로 정정(VOID+정정문, 원문 보존) — R022 정정문에 D-03(06) 부수효과로 적용범위가 두 모드 전체로 확대됐음을 명시
 
 ### Pending Todos
 
@@ -166,6 +170,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-27T08:40:29.063Z
-Stopped at: Completed 07-04-PLAN.md
+Last session: 2026-08-27T08:49:40.418Z
+Stopped at: Completed 07-05-PLAN.md
 Resume file: None
