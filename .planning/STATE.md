@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 07
 current_phase_name: API 자격 증명 저장 + 토큰 만료 사전 경고
 status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-08-27T08:32:28.661Z"
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-08-27T08:40:29.312Z"
 last_activity: 2026-08-27
 last_activity_desc: Phase 07 execution started
-state_head: 2fb2defbf9cbaa860131cd1fc6660bda3dbb74e6
+state_head: d4bb66086267d8d48a354863063a09202b0b110c
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-27)
 ## Current Position
 
 Phase: 07 (API 자격 증명 저장 + 토큰 만료 사전 경고) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-08-27 — Phase 07 execution started
 
@@ -91,6 +91,7 @@ Progress: [████████████████████] 13/13 p
 | Phase 07 P01 | 15 min | 2 tasks | 9 files |
 | Phase 07 P02 | ~20min | 3 tasks | 5 files |
 | Phase 07 P03 | ~25min | 3 tasks | 7 files |
+| Phase 07 P04 | ~15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,8 @@ Recent decisions affecting current work:
 - [Phase 07]: [Phase 07] ApplyEngine.checkTokenExpiry() — arm()과 _evaluateCurrentTokenExpiry()를 공유하는 D-10 재판정 진입점, phase/postSubmitted 불변
 - [Phase 07]: [Phase 07] 신규 IPC 채널 4종(auth:get-stored-credentials/credential-login-stored/clear-credentials, apply:check-token-expiry) handler+preload+타입+cleanup 4점 대칭 — credentialLoginStored는 email 단일 인자(D-01)
 - [Phase 07]: [Phase 07] WR-04/IN-01 이월 항목 폐쇄 — SettingsStore.setLoginMode() 저장 진입점 런타임 검증, readSettings() 읽기/파싱 원인 분리 로그
+- [Phase 07]: [Phase 07] resolveStoredLoginState() 순수 함수로 저장 자격증명 4상태 x 이메일 일치 여부 화면 판단을 단일 지점에 고정 — corrupted/unavailable 삭제 버튼 노출 여부를 구조적으로 구분(D-04/D-06)
+- [Phase 07]: [Phase 07] LoginPanel.tsx의 '로그아웃 + 자격 증명 삭제' 버튼을 제거하고 삭제 통제권을 로그인 여부와 무관한 D-07 상태문 자리로 통합 — 두 버튼이 겹치는 상태를 남기지 않음(D-06)
 
 ### Pending Todos
 
@@ -163,6 +166,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-27T08:32:28.517Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-08-27T08:40:29.063Z
+Stopped at: Completed 07-04-PLAN.md
 Resume file: None
