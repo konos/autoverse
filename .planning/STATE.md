@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 07
 current_phase_name: API 자격 증명 저장 + 토큰 만료 사전 경고
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-08-27T08:11:13.328Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-08-27T08:23:48.273Z"
 last_activity: 2026-08-27
 last_activity_desc: Phase 07 execution started
-state_head: d1a8dd1ae7b8e376d89ca97db887ac4533ab603c
+state_head: 44757a585e379a3fdbf7712af082d35c1c6e6017
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 18
-  completed_plans: 14
+  completed_plans: 15
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-27)
 ## Current Position
 
 Phase: 07 (API 자격 증명 저장 + 토큰 만료 사전 경고) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-08-27 — Phase 07 execution started
 
@@ -89,6 +89,7 @@ Progress: [████████████████████] 13/13 p
 | Phase 06-ui P09 | 7min | 3 tasks | 5 files |
 | Phase 06 P10 | 3min | 2 tasks | 4 files |
 | Phase 07 P01 | 15 min | 2 tasks | 9 files |
+| Phase 07 P02 | ~20min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,9 @@ Recent decisions affecting current work:
 - [Phase 07]: [Phase 07-01] arm() 만료 판정은 syncTime() 재호출 없이 schema.applyPeriod.startAt 로컬 시각을 그대로 예정 시각으로 사용 — D-08 외부 호출 0 유지, arm() 시점엔 syncResult 가 아직 없음
 - [Phase 07]: [Phase 07-01] RELOGIN_HEADROOM_MS=180_000(3분) 단일 상수 — 헤드리스 로그인 폼 로드 15초+응답 대기 25초+캡차 시 사람 개입 여유를 흡수, 호출부 리터럴 재사용 금지
 - [Phase 07]: [Phase 07-01] 이 플랜의 재로그인 진입점은 기존 브라우저 로그인(handleLogin)만 배선 — API 모드 저장 자격증명 재로그인·재로그인 중 초기화 억제는 07-05로 이연
+- [Phase 07]: [Phase 07] maskEmail() 단일 관문 신설 + SENSITIVE_PATTERNS email 규칙(JWT 구조 규칙 앞) — IN-02 가 지적한 이메일 마스킹 공백을 닫음(D-07/R010)
+- [Phase 07]: [Phase 07] getStoredCredentialsSnapshot()/loginWithStoredCredentials() 신설 — credentials.enc 4상태 계약(D-04)과 main 프로세스 이메일 불일치 최종 게이트(D-01/D-03)를 코드로 고정, StoredCredentialsSnapshot 타입에 password 필드 없음
+- [Phase 07]: [Phase 07] credentialLoginInFlight 가드(T-07-09) + restoreTokenIfLost()(D-14) — 연속 클릭의 중복 헤드리스 로그인 차단과 재로그인 실패 시 기존 토큰 보존을 credentialLogin() 에 배선
 
 ### Pending Todos
 
@@ -154,6 +158,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-27T08:11:13.202Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-08-27T08:23:48.146Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
