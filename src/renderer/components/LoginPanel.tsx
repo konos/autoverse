@@ -1,5 +1,10 @@
-import { useState } from "react";
-import type { AuthStatus, LoginMode, CredentialLoginResult } from "../../shared/types";
+import { useEffect, useState } from "react";
+import type {
+  AuthStatus,
+  LoginMode,
+  CredentialLoginResult,
+  StoredCredentialsSnapshot,
+} from "../../shared/types";
 import type { AcknowledgeOutcome } from "../login-mode-actions";
 import ApiModeNoticeModal from "./ApiModeNoticeModal";
 import {
@@ -9,6 +14,7 @@ import {
   decideTabClick,
   buildFailureView,
   decideNoticeCancel,
+  resolveStoredLoginState,
 } from "./login-panel-view";
 
 interface LoginPanelProps {
@@ -69,8 +75,29 @@ export default function LoginPanel({
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [noticeSaving, setNoticeSaving] = useState(false);
   const [noticeSaveError, setNoticeSaveError] = useState<string | null>(null);
+  const [storedSnapshot, setStoredSnapshot] = useState<StoredCredentialsSnapshot>({ state: "none" });
 
   const tabView = resolveTabView(loginMode, lockedByEnv);
+  const storedView = resolveStoredLoginState(storedSnapshot, email);
+
+  // 저장 자격증명 스냅샷을 다시 조회한다. 마운트 시 1회 + 삭제/저장 비밀번호
+  // 로그인 이후 재조회에 재사용한다. available 이면 이메일을 프리필하되(D-02),
+  // 사용자가 이미 무언가 입력한 뒤 덮어쓰지 않도록 이메일 state 가 빈 문자열일
+  // 때만 적용한다. **비밀번호 state 는 여기서도 절대 건드리지 않는다** —
+  // 저장된 비밀번호는 이 컴포넌트에 도달하지 않는다(D-01).
+  const refreshStoredSnapshot = () => {
+    window.api.auth.getStoredCredentials().then((snapshot) => {
+      setStoredSnapshot(snapshot);
+      if (snapshot.state === "available") {
+        setEmail((prev) => (prev === "" ? snapshot.email : prev));
+      }
+    });
+  };
+
+  useEffect(() => {
+    refreshStoredSnapshot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Interaction Contract 2/3: the tab click handler only branches on
   // decideTabClick()'s result — it never decides on its own whether to open
@@ -137,6 +164,35 @@ export default function LoginPanel({
     } finally {
       setCredLoading(false);
     }
+  };
+
+  // 저장된 비밀번호로 로그인한다(D-02). credentialLoginStored() 는 이메일 하나만
+  // 인자로 받는다 — 저장된 비밀번호는 main 프로세스 밖으로 나가지 않는다(D-01).
+  // 결과 처리/로딩 표시는 handleCredentialLogin() 과 동일한 방식을 따르고,
+  // 성공/실패 후 스냅샷을 다시 조회해 손상 상태 전이(D-04)가 화면에 반영되게 한다.
+  const handleStoredLogin = async () => {
+    setCredLoading(true);
+    setCredResult(null);
+    try {
+      const result = await window.api.auth.credentialLoginStored(email);
+      if (!result.success) {
+        setCredResult(result);
+      }
+    } catch {
+      setCredResult({ success: false, reason: "network-error" });
+    } finally {
+      setCredLoading(false);
+      refreshStoredSnapshot();
+    }
+  };
+
+  // 저장 정보만 지운다 — 로그아웃은 하지 않는다(D-06). 삭제 후 스냅샷을 다시
+  // 조회해 상태문/버튼을 갱신하고, 이메일 state 를 빈 문자열로 되돌려
+  // 프리필이 사라지는 것을 삭제의 눈에 보이는 결과로 만든다.
+  const handleClearStoredCredentials = async () => {
+    await window.api.auth.clearStoredCredentials();
+    setEmail("");
+    refreshStoredSnapshot();
   };
 
   const isActive = !loading && !status.isLoggedIn && !credLoading;
@@ -217,6 +273,32 @@ export default function LoginPanel({
         </p>
       )}
 
+      {/* D-06/D-07: 저장 사실 상태문 + 삭제 버튼 — 로그인 여부 조건 밖이라
+          미로그인 상태에서도 보인다. loginMode === "api" 노출 조건은 D-07 이
+          API 탭을 지정했기 때문이다. */}
+      {loginMode === "api" && (
+        <>
+          {storedView.statusLine && <p className="login-mode-notice">{storedView.statusLine}</p>}
+          {storedView.notice && (
+            <p className="error-message" role="alert">
+              {storedView.notice}
+            </p>
+          )}
+          {storedView.showClearButton && (
+            <div className="button-row" style={{ marginBottom: "0.5rem" }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => void handleClearStoredCredentials()}
+                disabled={loading}
+                style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem", color: "var(--color-error)" }}
+              >
+                저장된 로그인 정보 삭제
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
       <ApiModeNoticeModal
         open={noticeOpen}
         saving={noticeSaving}
@@ -243,16 +325,6 @@ export default function LoginPanel({
           >
             로그아웃
           </button>
-          {status.hasStoredCredentials && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => onLogout(true)}
-              disabled={loading}
-              style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem", color: "var(--color-error)" }}
-            >
-              로그아웃 + 자격 증명 삭제
-            </button>
-          )}
         </div>
       )}
 
@@ -296,6 +368,18 @@ export default function LoginPanel({
                     </code>
                   )}
                 </p>
+              )}
+              {storedView.showStoredLoginButton && (
+                <div className="button-row" style={{ marginBottom: "0.5rem" }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => void handleStoredLogin()}
+                    disabled={!isActive || !storedView.storedLoginEnabled}
+                    aria-busy={credLoading}
+                  >
+                    저장된 비밀번호로 로그인
+                  </button>
+                </div>
               )}
               <div className="button-row">
                 <button
