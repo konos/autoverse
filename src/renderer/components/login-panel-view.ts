@@ -9,9 +9,10 @@
  * 파생돼야 한다(UI-SPEC key_links) — 셋을 따로 계산하면 UI가 거짓말할 수 있다.
  * `resolveTabView()`가 이 세 값을 한 곳에서 만든다.
  */
-import type { LoginMode, CredentialLoginResult } from "../../shared/types";
+import type { LoginMode, CredentialLoginResult, StoredCredentialsSnapshot } from "../../shared/types";
 import { API_MODE_NOTICE_VERSION, shouldShowApiModeNotice } from "../../shared/api-mode-notice";
 import { mapLoginFailure } from "../../shared/login-failure";
+import { maskEmail } from "../../shared/mask";
 
 export interface TabView {
   active: LoginMode;
@@ -142,4 +143,88 @@ export type NoticeCancelDecision = "ignore" | "close";
  */
 export function decideNoticeCancel(saving: boolean): NoticeCancelDecision {
   return saving ? "ignore" : "close";
+}
+
+export interface StoredLoginState {
+  statusLine: string | null;
+  showClearButton: boolean;
+  showStoredLoginButton: boolean;
+  storedLoginEnabled: boolean;
+  notice: string | null;
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/**
+ * 저장 자격증명과 관련된 모든 화면 판단(무엇을 보여줄지, 어떤 버튼을 잠글지, 어떤
+ * 문구를 띄울지)을 이 함수 하나로 모은다 — 값이 뭉개지면 UI가 유령 저장 상태를
+ * 다시 만든다(D-02/D-03/D-04/D-06/D-07).
+ *
+ * (1) 이 판정은 **UI 상태 도출 전용**이다 — 실제 차단은
+ * `AuthService.loginWithStoredCredentials()` 의 메인 게이트가 다시 수행한다.
+ * 06-REVIEW WR-03 이 "버튼 비활성 실패가 관문을 우회한" 사례를 기록했으므로,
+ * 여기서의 판정을 관문으로 취급하지 않는다.
+ *
+ * (2) `unavailable` 에서도 삭제 버튼을 남기는 이유 — D-04 가 이 상태에서는
+ * `credentials.enc` 파일을 삭제하지 않고 보존하기 때문에 사용자에게 출구가
+ * 필요하고, D-06 이 그 출구를 이 버튼으로 지정했다. `corrupted` 는 파일이 이미
+ * 삭제된 상태라 삭제 버튼이 필요 없다.
+ */
+export function resolveStoredLoginState(
+  snapshot: StoredCredentialsSnapshot,
+  inputEmail: string,
+): StoredLoginState {
+  switch (snapshot.state) {
+    case "none":
+      return {
+        statusLine: null,
+        showClearButton: false,
+        showStoredLoginButton: false,
+        storedLoginEnabled: false,
+        notice: null,
+      };
+
+    case "available": {
+      const statusLine = `이 기기에 ${maskEmail(snapshot.email)} 로그인 정보가 암호화되어 저장되어 있습니다.`;
+      const trimmedInput = inputEmail.trim();
+      if (trimmedInput === "") {
+        // 아직 입력 중인 상태(빈 칸)를 불일치 오류로 표시하지 않는다.
+        return {
+          statusLine,
+          showClearButton: true,
+          showStoredLoginButton: true,
+          storedLoginEnabled: false,
+          notice: null,
+        };
+      }
+      const matches = normalizeEmail(inputEmail) === normalizeEmail(snapshot.email);
+      return {
+        statusLine,
+        showClearButton: true,
+        showStoredLoginButton: true,
+        storedLoginEnabled: matches,
+        notice: matches ? null : "다른 계정입니다 — 비밀번호를 입력하세요.",
+      };
+    }
+
+    case "corrupted":
+      return {
+        statusLine: null,
+        showClearButton: false,
+        showStoredLoginButton: false,
+        storedLoginEnabled: false,
+        notice: "저장된 로그인 정보를 읽지 못해 초기화했습니다 — 다시 입력해주세요.",
+      };
+
+    case "unavailable":
+      return {
+        statusLine: null,
+        showClearButton: true,
+        showStoredLoginButton: false,
+        storedLoginEnabled: false,
+        notice: "이 환경에서는 저장된 정보를 사용할 수 없습니다 — 비밀번호를 입력해주세요.",
+      };
+  }
 }

@@ -10,9 +10,10 @@ import {
   decideTabClick,
   buildFailureView,
   decideNoticeCancel,
+  resolveStoredLoginState,
 } from "../login-panel-view";
 import { API_MODE_NOTICE_VERSION } from "../../../shared/api-mode-notice";
-import type { CredentialLoginResult } from "../../../shared/types";
+import type { CredentialLoginResult, StoredCredentialsSnapshot } from "../../../shared/types";
 
 describe("resolveTabView", () => {
   it("잠금이 없으면 활성 탭만 지정되고 두 탭 모두 조작 가능하다", () => {
@@ -213,5 +214,80 @@ describe("decideNoticeCancel", () => {
 
   it("저장이 진행 중이 아니면 닫는다", () => {
     expect(decideNoticeCancel(false)).toBe("close");
+  });
+});
+
+describe("resolveStoredLoginState", () => {
+  const NONE: StoredCredentialsSnapshot = { state: "none" };
+  const AVAILABLE: StoredCredentialsSnapshot = { state: "available", email: "kim@weverse.io" };
+  const CORRUPTED: StoredCredentialsSnapshot = { state: "corrupted" };
+  const UNAVAILABLE: StoredCredentialsSnapshot = { state: "unavailable" };
+
+  it("none: 상태문·삭제 버튼·보조 버튼·안내 모두 없다", () => {
+    const view = resolveStoredLoginState(NONE, "");
+    expect(view.statusLine).toBeNull();
+    expect(view.showClearButton).toBe(false);
+    expect(view.showStoredLoginButton).toBe(false);
+    expect(view.storedLoginEnabled).toBe(false);
+    expect(view.notice).toBeNull();
+  });
+
+  it("available + 이메일 일치: 상태문·삭제 버튼·보조 버튼 노출, 보조 버튼 활성, 안내 없음", () => {
+    const view = resolveStoredLoginState(AVAILABLE, "kim@weverse.io");
+    expect(view.statusLine).not.toBeNull();
+    expect(view.showClearButton).toBe(true);
+    expect(view.showStoredLoginButton).toBe(true);
+    expect(view.storedLoginEnabled).toBe(true);
+    expect(view.notice).toBeNull();
+  });
+
+  it("available + 대소문자만 다른 이메일: 일치로 판정되어 보조 버튼이 활성이다", () => {
+    const view = resolveStoredLoginState(AVAILABLE, "KIM@Weverse.io");
+    expect(view.storedLoginEnabled).toBe(true);
+    expect(view.notice).toBeNull();
+  });
+
+  it("available + 앞뒤 공백만 다른 이메일: 일치로 판정되어 보조 버튼이 활성이다", () => {
+    const view = resolveStoredLoginState(AVAILABLE, "  kim@weverse.io  ");
+    expect(view.storedLoginEnabled).toBe(true);
+    expect(view.notice).toBeNull();
+  });
+
+  it("available + 다른 이메일: 상태문·삭제·보조 버튼은 그대로 있으나 보조 버튼은 비활성, '다른 계정입니다' 안내", () => {
+    const view = resolveStoredLoginState(AVAILABLE, "other@weverse.io");
+    expect(view.statusLine).not.toBeNull();
+    expect(view.showClearButton).toBe(true);
+    expect(view.showStoredLoginButton).toBe(true);
+    expect(view.storedLoginEnabled).toBe(false);
+    expect(view.notice).toBe("다른 계정입니다 — 비밀번호를 입력하세요.");
+  });
+
+  it("available + 공백뿐인 입력: 보조 버튼 비활성이지만 안내는 없다(입력 중인 상태를 오류로 표시하지 않는다)", () => {
+    const view = resolveStoredLoginState(AVAILABLE, "   ");
+    expect(view.storedLoginEnabled).toBe(false);
+    expect(view.notice).toBeNull();
+    expect(view.showStoredLoginButton).toBe(true);
+  });
+
+  it("available 상태문에는 원문 이메일이 그대로 나타나지 않고 마스킹된 형태만 나타난다", () => {
+    const view = resolveStoredLoginState(AVAILABLE, "kim@weverse.io");
+    expect(view.statusLine).not.toContain("kim@weverse.io");
+    expect(view.statusLine).toContain("k**@weverse.io");
+  });
+
+  it("corrupted: 상태문·삭제·보조 버튼 모두 없고, 초기화 안내가 뜬다", () => {
+    const view = resolveStoredLoginState(CORRUPTED, "");
+    expect(view.statusLine).toBeNull();
+    expect(view.showClearButton).toBe(false);
+    expect(view.showStoredLoginButton).toBe(false);
+    expect(view.notice).toBe("저장된 로그인 정보를 읽지 못해 초기화했습니다 — 다시 입력해주세요.");
+  });
+
+  it("unavailable: 상태문·보조 버튼은 없지만 삭제 버튼은 있다(파일 보존, 출구 필요)", () => {
+    const view = resolveStoredLoginState(UNAVAILABLE, "");
+    expect(view.statusLine).toBeNull();
+    expect(view.showClearButton).toBe(true);
+    expect(view.showStoredLoginButton).toBe(false);
+    expect(view.notice).toBe("이 환경에서는 저장된 정보를 사용할 수 없습니다 — 비밀번호를 입력해주세요.");
   });
 });
