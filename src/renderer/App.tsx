@@ -198,7 +198,12 @@ export default function App() {
       )}
 
       {step === "apply-execution" && formSchema && (
-        <ApplyExecution onReset={handleReset} applyPeriod={formSchema.applyPeriod} eventId={formSchema.eventPublicId} />
+        <ApplyExecution
+          onReset={handleReset}
+          applyPeriod={formSchema.applyPeriod}
+          eventId={formSchema.eventPublicId}
+          onRelogin={handleLogin}
+        />
       )}
 
       <LogPanel />

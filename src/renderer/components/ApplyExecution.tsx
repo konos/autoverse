@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import type { ApplyEvent, ApplyPhase, ApplyResult, ApplyPeriod, VerifyResult } from "../../shared/types";
+import type { TokenExpiryState } from "../../shared/token-expiry";
+import { describeTokenExpiryNotice } from "./apply-execution-view";
 
 interface ApplyExecutionProps {
   onReset: () => void;
   applyPeriod: ApplyPeriod;
   eventId: string;
+  onRelogin: () => void;
 }
 
 const PHASE_LABELS: Record<ApplyPhase, string> = {
@@ -65,13 +68,14 @@ function formatKST(iso: string): string {
   }
 }
 
-export default function ApplyExecution({ onReset, applyPeriod, eventId }: ApplyExecutionProps) {
+export default function ApplyExecution({ onReset, applyPeriod, eventId, onRelogin }: ApplyExecutionProps) {
   const [phase, setPhase] = useState<ApplyPhase>("armed");
   const [events, setEvents] = useState<ApplyEvent[]>([]);
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [expiryState, setExpiryState] = useState<TokenExpiryState>({ status: "safe" });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -96,6 +100,17 @@ export default function ApplyExecution({ onReset, applyPeriod, eventId }: ApplyE
       if (event.type === "time-synced" && event.data) {
         const rec = (event.data as { recommendedEarlyMs?: number }).recommendedEarlyMs;
         if (rec != null) setRecommendedEarlyMs(rec);
+      }
+      if (event.type === "token-expiry-checked" && event.data) {
+        // event.data 는 Record<string, unknown> 이므로 좁혀서 TokenExpiryState 로 복원한다.
+        const { status, expAt } = event.data as { status?: string; expAt?: number };
+        if (status === "warning" && typeof expAt === "number") {
+          setExpiryState({ status: "warning", expAt });
+        } else if (status === "unknown") {
+          setExpiryState({ status: "unknown" });
+        } else {
+          setExpiryState({ status: "safe" });
+        }
       }
       if (event.type === "apply-error" && event.error) {
         setError(`${event.error.code}: ${event.error.message}`);
@@ -197,6 +212,45 @@ export default function ApplyExecution({ onReset, applyPeriod, eventId }: ApplyE
           )}
         </div>
       </div>
+
+      {/* 토큰 만료 사전 경고 배너 (D-15) — 기존 대기 화면 인라인, 새 모달/영역을 만들지
+          않는다. 경고가 신청 실행 버튼의 disabled 조건에 관여하지 않는다(D-12). */}
+      {(() => {
+        const notice = describeTokenExpiryNotice(expiryState);
+        if (!notice.visible) return null;
+        const color = notice.tone === "warning" ? "var(--color-error)" : "var(--color-warning)";
+        return (
+          <div
+            role="alert"
+            style={{
+              marginTop: "0.75rem",
+              padding: "0.75rem",
+              borderRadius: "8px",
+              border: `1px solid ${color}`,
+              background: notice.tone === "warning" ? "rgba(239,68,68,0.08)" : "rgba(234,179,8,0.08)",
+            }}
+          >
+            <p className="error-message" style={{ color, margin: 0 }}>
+              {notice.message}
+              {notice.expAt !== undefined && (
+                <span style={{ marginLeft: "0.4rem", fontWeight: 600 }}>
+                  (만료까지 {formatCountdown(notice.expAt - now)})
+                </span>
+              )}
+            </p>
+            {notice.showRelogin && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={onRelogin}
+                style={{ marginTop: "0.5rem", fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
+              >
+                다시 로그인
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 선제출 설정 */}
       {!isTerminal && (
