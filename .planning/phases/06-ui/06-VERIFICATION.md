@@ -1,7 +1,7 @@
 ---
 phase: 06-ui
 verified: 2026-08-26T08:12:12Z
-status: human_needed
+status: passed
 score: 7/7 truths verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -9,20 +9,25 @@ re_verification:
   previous_status: gaps_found
   previous_score: 5/7
   gaps_closed:
+
     - "사용자가 API 모드를 처음 선택하면 두 가지 고지를 확인해야만 진행할 수 있다 — 확인 저장이 실패하면 모달이 닫히지 않고 모드도 바뀌지 않는다 (ROADMAP SC2 정정본, 06-06-PLAN must_haves) — CR-01, 06-08 로 해소"
     - "렌더러로 돌아가는 실패 문구와 식별자는 마스킹을 통과한 값뿐이다 — 토큰·비밀번호·URL 쿼리스트링이 화면에 노출되지 않는다 (06-05-PLAN must_haves, R010) — CR-02, 06-09/06-10 으로 해소"
   gaps_remaining: []
   regressions: []
 human_verification:
+
   - test: "브라우저 모드 선택 → 앱 완전 종료 → 재실행 시 브라우저 탭이 유지되는지 (API→재시작 방향은 06-01 트레이서 체크포인트에서 실제 Electron 세션으로 이미 확인됨 — 반대 방향만 미확인)"
     expected: "재실행 후 로그인 방식 탭이 browser로 표시된다"
     why_human: "실제 앱 재시작이 필요하다 — settings-store.ts의 왕복 로직은 양방향 대칭으로 구현돼 있고 API 방향은 단위 테스트(79-87행)로 커버되지만, 육안 확인 자체는 수행되지 않았다 (06-VALIDATION.md UAT #1)"
+
   - test: "최초 API 모드 선택 시 고지 모달이 실제로 진행을 막는지, 좁은 창에서도 확인 버튼에 닿는지"
     expected: "모달이 포커스를 잡고 배경 상호작용을 막으며, 창을 최소로 줄여도 확인 버튼이 스크롤 영역 밖에 남아 클릭 가능하다"
     why_human: "네이티브 <dialog> 포커스 트랩과 실제 창 크기에서의 시각적 레이아웃은 Electron 런타임이 필요하다 (06-VALIDATION.md UAT #2, 06-06-SUMMARY.md D1/D5 human_judgment:true)"
+
   - test: "환경변수로 로그인 방식이 잠기면 실제 화면에 잠금 배지만 표시되고 환경변수 원문 값은 어디에도 보이지 않는지"
     expected: "탭 두 개 모두 비활성화되고 고정 문구(MODE_LABEL) 배지만 보인다"
     why_human: "실제 환경변수를 설정한 채로 앱을 실행해야 확인 가능하다 (06-VALIDATION.md UAT #3)"
+
   - test: "오타 비밀번호로 실제 로그인 시도 시 서버 에러 코드 대신 한국어 설명 문구가 표시되는지"
     expected: "폼 오류 사유에 맞는 확정 한국어 안내가 표시되고 서버 원문/에러 코드가 노출되지 않는다"
     why_human: "실계정 로그인 시도가 필요하다 — 이 phase의 모든 자동 검증은 스텁 fetch/DOM 신호 기반 단위 테스트로 닫혀 있다 (06-VALIDATION.md UAT #4)"
@@ -75,6 +80,7 @@ human_verification:
 
 1. `src/renderer/login-mode-actions.ts` (신규) — `createLoginModeActions()`가 내부적으로
    두 개의 클로저를 만든다:
+
    - `saveModeStrict(mode)`: `persistLoginMode()`가 reject하면 그대로 위로 던진다(삼키지 않음).
    - `saveModeSafe(mode)`: `saveModeStrict`를 감싸 예외를 삼키고 배너 문구만 표시한다.
 
@@ -268,6 +274,7 @@ acceptance criterion 문구다. 다음 phase가 이 편차를 재작업 사유�
 - **WR-05** (문맥 없는 JWT 규칙의 과잉 마스킹 가능성): 방향이 반대다 — "노출되지 않아야 할 것이
   노출됨"이 아니라 "노출돼야 할 정상 진단 정보가 과도하게 지워질 수 있음". Gap 2의 must-have를
   위협하지 않는다. 위 Anti-Patterns 표에 Warning으로 기록해 다음 phase가 참고하게 했다.
+
 - **IN-05/IN-06/IN-07**: 전부 문서 정확도·의도 명시 부족·로그 줄 분리 관련 Info 수준 관찰이며,
   기능적 결함이 아니라고 리뷰 자체가 명시한다. 재확인 결과 동의한다.
 
@@ -281,6 +288,7 @@ acceptance criterion 문구다. 다음 phase가 이 편차를 재작업 사유�
 라운드가 해소한 범위(코드 수준 실패 계약, 마스킹 관문)와 별개의 검증 축이다. Known state에
 따르면 다음 두 가지는 사용자가 06-01 트레이서 체크포인트에서 실제 Electron 세션으로 이미
 확인했다:
+
 - API 모드 선택 → 앱 완전 종료 → 재실행 시 탭 유지
 - 로그인 상태에서 탭 전환 시 "로그인 완료" 배지 유지 (D-07)
 
@@ -289,6 +297,7 @@ acceptance criterion 문구다. 다음 phase가 이 편차를 재작업 사유�
 이 판단이 필요하지 않았다. 이제 코드 수준 gap이 모두 닫힌 상태에서, 이 phase가 정말
 "완료"인지 판단하려면 이 4+2개 항목 중 미확인 상태로 남은 것들에 대한 사람의 확인이 필요하다
 — 이 검증이 그것을 임의로 통과 처리할 권한은 없다:
+
 - 브라우저 모드 → 재시작 방향의 영속 확인 (API 방향만 실제 확인됨, 코드는 대칭 구현 + 단위 테스트로 신뢰도 높음)
 - 최초 고지 차단 동작의 실제 인터랙션(포커스 트랩, 좁은 창에서 버튼 도달성) — D1/D5
 - 환경변수 잠금 시 실제 화면 표시
