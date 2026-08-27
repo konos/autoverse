@@ -9,7 +9,9 @@ import type {
   LoginMode,
   LoginModeSnapshot,
   NoticeAckSnapshot,
+  StoredCredentialsSnapshot,
 } from "../shared/types";
+import type { TokenExpiryState } from "../shared/token-expiry";
 
 const api: IpcApi = {
   auth: {
@@ -21,6 +23,12 @@ const api: IpcApi = {
     logout: (clearCredentials?: boolean) =>
       ipcRenderer.invoke("auth:logout", clearCredentials),
     tryAutoLogin: () => ipcRenderer.invoke("auth:auto-login"),
+    getStoredCredentials: (): Promise<StoredCredentialsSnapshot> =>
+      ipcRenderer.invoke("auth:get-stored-credentials"),
+    credentialLoginStored: (email: string): Promise<CredentialLoginResult> =>
+      ipcRenderer.invoke("auth:credential-login-stored", email),
+    clearStoredCredentials: (): Promise<void> =>
+      ipcRenderer.invoke("auth:clear-credentials"),
   },
   profile: {
     save: (profile: Profile) => ipcRenderer.invoke("profile:save", profile),
@@ -35,6 +43,8 @@ const api: IpcApi = {
     getState: () => ipcRenderer.invoke("apply:state"),
     reset: () => ipcRenderer.invoke("apply:reset"),
     verify: (eventId: string) => ipcRenderer.invoke("apply:verify", eventId),
+    checkTokenExpiry: (): Promise<TokenExpiryState> =>
+      ipcRenderer.invoke("apply:check-token-expiry"),
   },
   log: {
     onEntry: (cb: (entry: LogEntry) => void) => {

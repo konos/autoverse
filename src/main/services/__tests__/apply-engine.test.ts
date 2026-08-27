@@ -311,6 +311,61 @@ describe("ApplyEngine — arm() 만료 판정 (D-10, R022)", () => {
   });
 });
 
+describe("ApplyEngine — checkTokenExpiry() 재판정 진입점 (D-10)", () => {
+  it("(a) 스키마가 없으면 unknown을 반환하고 이벤트를 발행하지 않는다", () => {
+    const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
+
+    const events: ApplyEvent[] = [];
+    engine.on("token-expiry-checked", (e) => events.push(e));
+
+    const result = engine.checkTokenExpiry();
+
+    expect(result).toEqual({ status: "unknown" });
+    expect(events).toHaveLength(0);
+  });
+
+  it("(b) arm 이후 토큰을 만료 임박에서 충분히 먼 값으로 바꾸고 checkTokenExpiry()를 호출하면 safe가 반환되고 이벤트가 새로 발행된다", async () => {
+    const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
+    const schema = await engine.fetchForm("EVENT001");
+    const plannedSubmitAtMs = new Date(schema.applyPeriod.startAt).getTime();
+
+    const nearExpSec = Math.floor((plannedSubmitAtMs + 1_000) / 1000);
+    tokenBox.current = makeJwt({ exp: nearExpSec });
+
+    const events: ApplyEvent[] = [];
+    engine.on("token-expiry-checked", (e) => events.push(e));
+
+    engine.arm([100], [1, 2]);
+    expect(events).toHaveLength(1);
+    expect(events[0].data?.status).toBe("warning");
+
+    const farExpSec = Math.floor((plannedSubmitAtMs + 10 * 60 * 1000) / 1000);
+    tokenBox.current = makeJwt({ exp: farExpSec });
+
+    const result = engine.checkTokenExpiry();
+
+    expect(result.status).toBe("safe");
+    expect(events).toHaveLength(2);
+    expect(events[1].data?.status).toBe("safe");
+  });
+
+  it("(c) 연속 3회 호출해도 getState().phase와 postSubmitted가 변하지 않는다", async () => {
+    const engine = new ApplyEngine(makeApi() as never, makeTiming() as never);
+    await engine.fetchForm("EVENT001");
+    engine.arm([100], [1, 2]);
+
+    const phaseBefore = engine.getState().phase;
+    const postSubmittedBefore = engine.getState().postSubmitted;
+
+    engine.checkTokenExpiry();
+    engine.checkTokenExpiry();
+    engine.checkTokenExpiry();
+
+    expect(engine.getState().phase).toBe(phaseBefore);
+    expect(engine.getState().postSubmitted).toBe(postSubmittedBefore);
+  });
+});
+
 describe("ApplyEngine — execute() 안전 가드", () => {
   it("POST 1회만 제출 — 두 번째 execute()는 POST_ALREADY_SUBMITTED", async () => {
     let callCount = 0;

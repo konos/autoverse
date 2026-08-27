@@ -1,4 +1,5 @@
 import type { LoginFailureReason } from "./login-failure";
+import type { TokenExpiryState } from "./token-expiry";
 
 // ── Log types ─────────────────────────────────────────────────────────────────
 
@@ -308,6 +309,17 @@ export interface IpcApi {
     validateToken: () => Promise<AuthStatus>;
     logout: (clearCredentials?: boolean) => Promise<void>;
     tryAutoLogin: () => Promise<boolean>;
+    /** D-04 4상태 계약 그대로 반환 — `password` 필드는 어떤 상태에도 없다. */
+    getStoredCredentials: () => Promise<StoredCredentialsSnapshot>;
+    /**
+     * 저장된 비밀번호로 로그인한다(D-01/D-06). **이 채널의 계약 자체가
+     * 비밀번호를 인자로 받지 않는다** — 비밀번호는 `credentials.enc` 밖으로
+     * 나가지 않고, 복호화와 로그인 수행 전부를 main 프로세스가 담당한다.
+     * 이메일만 넘겨 main 이 저장 이메일과 다시 비교한다(D-03 최종 게이트).
+     */
+    credentialLoginStored: (email: string) => Promise<CredentialLoginResult>;
+    /** 로그인 상태와 무관하게 저장된 자격증명을 삭제한다(D-06). 로그아웃은 수행하지 않는다. */
+    clearStoredCredentials: () => Promise<void>;
   };
   profile: {
     save: (profile: Profile) => Promise<void>;
@@ -321,6 +333,8 @@ export interface IpcApi {
     getState: () => Promise<ApplyEngineState>;
     reset: () => Promise<void>;
     verify: (eventId: string) => Promise<VerifyResult>;
+    /** 만료 재판정 진입점(D-10) — 재로그인 뒤 새 토큰의 exp 로 다시 판정한다. */
+    checkTokenExpiry: () => Promise<TokenExpiryState>;
   };
   log: {
     onEntry: (cb: (entry: LogEntry) => void) => () => void;

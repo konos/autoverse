@@ -7,6 +7,7 @@ import { buildApplyPayload } from "../../shared/payload-builder";
 import { validateFormSchema } from "../../shared/form-parser";
 import { maskToken } from "../../shared/mask";
 import { parseJwtExpMs, evaluateTokenExpiry, RELOGIN_HEADROOM_MS } from "../../shared/token-expiry";
+import type { TokenExpiryState } from "../../shared/token-expiry";
 import { logService } from "./log-service";
 import type {
   FormSchema,
@@ -132,31 +133,30 @@ export class ApplyEngine extends EventEmitter {
 
     // ── D-10: arm 즉시 만료 판정 ────────────────────────────────────────────
     // exp 는 재로그인 전까지 불변이므로 arm 시점에 이미 결론이 난다 — 가장 이른
-    // 시점에 경고해 최대 대응 시간을 준다. 예정 시각은 syncTime() 을 새로
-    // 호출하지 않고 schema.applyPeriod.startAt 을 그대로 쓴다(D-08, 외부 호출
-    // 0건 — syncResult 는 execute() 안에서만 채워지므로 arm() 시점엔 존재하지
-    // 않는다). 판정 실패가 arm 자체를 실패시키지 않는다 — 결과가 safe/warning/
-    // unknown 어느 쪽이든 항상 이벤트를 발행한다(재판정 시 이전 경고를 지울 수
-    // 있어야 하므로 safe 도 발행한다, D-12).
-    const plannedSubmitAtMs = new Date(this.schema.applyPeriod.startAt).getTime();
-    const expMs = parseJwtExpMs(authService.token);
-    const expiryState = evaluateTokenExpiry(expMs, plannedSubmitAtMs, RELOGIN_HEADROOM_MS);
+    // 시점에 경고해 최대 대응 시간을 준다. 판정 자체는 checkTokenExpiry() 와
+    // 공유하는 _evaluateCurrentTokenExpiry() 가 수행한다(계산을 두 곳에
+    // 복제하지 않는다). 판정 실패가 arm 자체를 실패시키지 않는다 — 결과가
+    // safe/warning/unknown 어느 쪽이든 항상 이벤트를 발행한다(재판정 시 이전
+    // 경고를 지울 수 있어야 하므로 safe 도 발행한다, D-12).
+    this._evaluateCurrentTokenExpiry(this.schema);
+  }
 
-    logService.info(
-      "ApplyEngine",
-      `token-expiry-checked status=${expiryState.status} plannedSubmitAt=${new Date(plannedSubmitAtMs).toISOString()} headroomMs=${RELOGIN_HEADROOM_MS}`,
-    );
-
-    this._emitEvent({
-      type: "token-expiry-checked",
-      timestamp: Date.now(),
-      data: {
-        status: expiryState.status,
-        ...(expiryState.status === "warning" ? { expAt: expiryState.expAt } : {}),
-        plannedSubmitAt: plannedSubmitAtMs,
-        headroomMs: RELOGIN_HEADROOM_MS,
-      },
-    });
+  /**
+   * 만료 재판정 진입점(D-10). `arm()` 이 수행하는 것과 동일한 계산을
+   * `_evaluateCurrentTokenExpiry()` 로 공유해 재로그인 뒤 새 토큰의 `exp` 로
+   * 다시 판정할 수 있게 한다 — 이 진입점이 없으면 재로그인해도 대기 화면의
+   * 경고가 남아 UI 가 거짓말하게 된다.
+   *
+   * 스키마가 없으면(fetchForm() 이전) 이벤트를 발행하지 않고 `unknown` 을
+   * 그대로 반환한다. 스키마가 있으면 판정 후 `token-expiry-checked` 를 다시
+   * 발행하고 결과를 반환한다. 이 메서드는 `phase` 나 `postSubmitted` 를
+   * 건드리지 않는다 — 몇 번을 호출해도 신청 상태가 변하지 않는다(T-07-14).
+   */
+  checkTokenExpiry(): TokenExpiryState {
+    if (!this.schema) {
+      return { status: "unknown" };
+    }
+    return this._evaluateCurrentTokenExpiry(this.schema);
   }
 
   /**
@@ -403,6 +403,37 @@ export class ApplyEngine extends EventEmitter {
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
+
+  /**
+   * D-08/D-10 판정 계산의 단일 관문 — `arm()` 과 `checkTokenExpiry()` 가 공유
+   * 한다. 예정 시각은 `syncTime()` 을 새로 호출하지 않고 `schema.applyPeriod.
+   * startAt` 을 그대로 쓴다(D-08, 외부 호출 0 유지). 판정 후 항상
+   * `token-expiry-checked` 이벤트를 발행한다(safe 도 발행 — 재판정 시 이전
+   * 경고를 지울 수 있어야 하므로, D-12).
+   */
+  private _evaluateCurrentTokenExpiry(schema: FormSchema): TokenExpiryState {
+    const plannedSubmitAtMs = new Date(schema.applyPeriod.startAt).getTime();
+    const expMs = parseJwtExpMs(authService.token);
+    const expiryState = evaluateTokenExpiry(expMs, plannedSubmitAtMs, RELOGIN_HEADROOM_MS);
+
+    logService.info(
+      "ApplyEngine",
+      `token-expiry-checked status=${expiryState.status} plannedSubmitAt=${new Date(plannedSubmitAtMs).toISOString()} headroomMs=${RELOGIN_HEADROOM_MS}`,
+    );
+
+    this._emitEvent({
+      type: "token-expiry-checked",
+      timestamp: Date.now(),
+      data: {
+        status: expiryState.status,
+        ...(expiryState.status === "warning" ? { expAt: expiryState.expAt } : {}),
+        plannedSubmitAt: plannedSubmitAtMs,
+        headroomMs: RELOGIN_HEADROOM_MS,
+      },
+    });
+
+    return expiryState;
+  }
 
   private _setPhase(phase: ApplyPhase): void {
     this.phase = phase;

@@ -68,6 +68,30 @@ export function registerIpcHandlers(): void {
     authService.tryAutoLogin()
   );
 
+  // auth:get-stored-credentials — D-04 4상태 계약을 그대로 반환. 인자 없음,
+  // password 필드는 어떤 상태에도 존재하지 않는다(D-01).
+  ipcMain.handle("auth:get-stored-credentials", async () =>
+    authService.getStoredCredentialsSnapshot()
+  );
+
+  // auth:credential-login-stored — 저장된 비밀번호로 로그인(D-01/D-06). 비밀번호는
+  // 인자로 받지 않는다 — 계약 자체가 이메일 하나뿐이다. WR-04 선례(런타임 검증
+  // 없이 임의 값을 받아들인 결함)를 반복하지 않기 위해, 이 채널은 외부에
+  // 부수효과(실제 로그인 요청)를 만들므로 타입 캐스팅만 믿지 않고 런타임에
+  // `typeof` 를 검사한 뒤에만 authService 를 호출한다.
+  ipcMain.handle("auth:credential-login-stored", async (_evt, email: unknown) => {
+    if (typeof email !== "string") {
+      throw new Error("email 인자가 문자열이 아닙니다");
+    }
+    return authService.loginWithStoredCredentials(email);
+  });
+
+  // auth:clear-credentials — 로그인 상태와 무관하게 저장된 자격증명을 삭제한다(D-06).
+  // 로그아웃(토큰/세션 초기화)은 수행하지 않는다.
+  ipcMain.handle("auth:clear-credentials", async () => {
+    authService.clearCredentials();
+  });
+
   // profile:save — encrypt via safeStorage, persist to disk
   ipcMain.handle("profile:save", async (_evt, profile: Profile) => {
     profileStore.saveProfile(profile);
@@ -111,6 +135,12 @@ export function registerIpcHandlers(): void {
     applyEngine.verifyApplication(eventId)
   );
 
+  // apply:check-token-expiry — 만료 재판정 진입점(D-10). 재로그인 뒤 새 토큰의
+  // exp 로 다시 판정하기 위해 존재한다. phase/postSubmitted 를 건드리지 않는다.
+  ipcMain.handle("apply:check-token-expiry", async () =>
+    applyEngine.checkTokenExpiry()
+  );
+
   // settings:get-login-mode — resolved mode (env override > persisted) + lock flag (D-06)
   ipcMain.handle("settings:get-login-mode", async () => settingsStore.getLoginModeSnapshot());
 
@@ -152,6 +182,9 @@ export function unregisterIpcHandlers(): void {
   ipcMain.removeHandler("auth:validate-token");
   ipcMain.removeHandler("auth:logout");
   ipcMain.removeHandler("auth:auto-login");
+  ipcMain.removeHandler("auth:get-stored-credentials");
+  ipcMain.removeHandler("auth:credential-login-stored");
+  ipcMain.removeHandler("auth:clear-credentials");
   ipcMain.removeHandler("profile:save");
   ipcMain.removeHandler("profile:get");
   ipcMain.removeHandler("profile:clear");
@@ -161,6 +194,7 @@ export function unregisterIpcHandlers(): void {
   ipcMain.removeHandler("apply:state");
   ipcMain.removeHandler("apply:reset");
   ipcMain.removeHandler("apply:verify");
+  ipcMain.removeHandler("apply:check-token-expiry");
   ipcMain.removeHandler("settings:get-login-mode");
   ipcMain.removeHandler("settings:set-login-mode");
   ipcMain.removeHandler("settings:get-notice-ack");
