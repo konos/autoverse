@@ -727,6 +727,73 @@ describe("AuthService.buildLadderFailureEvent — 사다리 실패가 사용자�
   });
 });
 
+// ── restoreTokenIfLost (Task 3, D-14) ───────────────────────────────────────
+//
+// credentialLogin() 자체는 실제 헤드리스 BrowserWindow DOM 흐름 없이는 태울 수
+// 없다(위 buildFailureResult 계약 테스트와 동일한 제약 — 이 저장소에는 DOM 테스트
+// 환경이 없다). credentialLogin() 이 세 실패 지점 각각에서 위임하는
+// restoreTokenIfLost() 를 직접 호출하는 계약 테스트로 D-14 의 보장을 검증한다.
+
+interface PrivateRestoreToken {
+  restoreTokenIfLost(previousToken: string | null): void;
+}
+
+function asRestoreToken(service: AuthService): PrivateRestoreToken {
+  return service as unknown as PrivateRestoreToken;
+}
+
+function setCachedToken(service: AuthService, token: string | null): void {
+  (service as unknown as { cachedToken: string | null }).cachedToken = token;
+}
+
+describe("AuthService.restoreTokenIfLost — 재로그인 실패가 기존 토큰을 앗아가지 않는다 (D-14)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("(a) 기존 토큰이 있었고 재로그인 실패로 현재 토큰이 비었으면 호출 이전 값으로 복원된다", () => {
+    const service = new AuthService();
+    const previousToken = makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    setCachedToken(service, null); // credentialLogin() 실패 경로 종료 시점을 흉내낸다
+
+    asRestoreToken(service).restoreTokenIfLost(previousToken);
+
+    expect(service.token).toBe(previousToken);
+  });
+
+  it("(b) 실패 경로에서 토큰이 인위적으로 비워지는 상황을 만들어도 복원 헬퍼가 이전 값을 되돌린다", () => {
+    const service = new AuthService();
+    const previousToken = makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    setCachedToken(service, previousToken);
+    // credentialLogin() 안에서 실패 직전 상태 정리 코드가 토큰을 비웠다고 가정
+    setCachedToken(service, null);
+
+    asRestoreToken(service).restoreTokenIfLost(previousToken);
+
+    expect(service.token).toBe(previousToken);
+  });
+
+  it("(c) 호출 직전에 토큰이 없었다면(null) 실패 후에도 null 이다 — 없던 토큰을 만들어내지 않는다", () => {
+    const service = new AuthService();
+    setCachedToken(service, null);
+
+    asRestoreToken(service).restoreTokenIfLost(null);
+
+    expect(service.token).toBeNull();
+  });
+
+  it("현재 토큰이 이미 채워져 있으면(성공 경로) 복원이 새 토큰을 덮어쓰지 않는다", () => {
+    const service = new AuthService();
+    const newToken = makeJwt({ exp: Math.floor(Date.now() / 1000) + 7200 });
+    const previousToken = makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    setCachedToken(service, newToken);
+
+    asRestoreToken(service).restoreTokenIfLost(previousToken);
+
+    expect(service.token).toBe(newToken);
+  });
+});
+
 // ── getStoredCredentialsSnapshot (D-04 4상태 계약) ───────────────────────────
 
 describe("AuthService.getStoredCredentialsSnapshot — D-04 4상태 계약", () => {

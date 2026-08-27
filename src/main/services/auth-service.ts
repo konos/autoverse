@@ -376,6 +376,15 @@ export class AuthService extends EventEmitter {
 
     this.cleanupHeadless();
 
+    // D-14 — 기존 we2_access_token 쿠키를 제거하기 직전에 현재 토큰을 백업한다.
+    // 대기 중 재로그인이 캡차에 막혀 실패해도, 곧 만료되지만 아직 유효했던 토큰을
+    // restoreTokenIfLost() 가 복원한다("재로그인 시도가 상황을 더 나쁘게 만들지
+    // 않는다"). 현재 코드는 이 메서드가 실패 경로에서 this.cachedToken 을 직접
+    // 비우지 않아 이 보장이 우연히 성립하는 상태다 — D-14 는 그 우연을 계약으로
+    // 고정한다. 복원이 실효적인 이유: submitApplication() 은 쿠키가 아니라
+    // Authorization: Bearer 헤더로 인증한다(weverse-api.ts:13-18 commonHeaders()).
+    const previousToken = this.cachedToken;
+
     const ses = session.fromPartition("persist:weverse");
     try {
       const old = await ses.cookies.get({ name: "we2_access_token" });
@@ -505,6 +514,7 @@ export class AuthService extends EventEmitter {
         );
         this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
         this.cleanupHeadless();
+        this.restoreTokenIfLost(previousToken);
         return failureResult;
       }
 
@@ -627,6 +637,7 @@ export class AuthService extends EventEmitter {
       );
       this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
       this.cleanupHeadless();
+      this.restoreTokenIfLost(previousToken);
       return failureResult;
     } catch (err) {
       const rawDetail = err instanceof Error ? err.message : String(err);
@@ -634,6 +645,7 @@ export class AuthService extends EventEmitter {
       logService.error("AuthService", `credentialLogin(headless) exception: ${rawDetail}`);
       this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
       this.cleanupHeadless();
+      this.restoreTokenIfLost(previousToken);
       return failureResult;
     }
     } finally {
@@ -733,6 +745,25 @@ export class AuthService extends EventEmitter {
       this.headlessWindow.close();
     }
     this.headlessWindow = null;
+  }
+
+  /**
+   * D-14 — 대기 중 재로그인이 실패했는데 `this.cachedToken` 이 비어 있으면(호출
+   * 직전에 있던 토큰이 사라졌으면) 이전 토큰으로 되돌린다. "없던 토큰을 만들어
+   * 내지 않는다" — `previousToken` 이 애초에 `null` 이었으면 아무 것도 하지
+   * 않는다. 현재 `credentialLogin()` 은 실패 경로에서 `this.cachedToken` 을
+   * 직접 비우지 않아 이 보장이 우연히 성립하는 상태다 — 이 헬퍼와 회귀 테스트가
+   * 그 우연을 계약으로 고정한다(앞으로 실패 시 상태 정리 코드가 추가되더라도
+   * 보장이 깨지지 않는다).
+   */
+  private restoreTokenIfLost(previousToken: string | null): void {
+    if (this.cachedToken === null && previousToken !== null) {
+      this.cachedToken = previousToken;
+      logService.warn(
+        "AuthService",
+        `credentialLogin(headless): 재로그인 실패 — 이전 토큰 복원 ${maskToken(previousToken)}`,
+      );
+    }
   }
 
   /**
