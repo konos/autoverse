@@ -5,16 +5,16 @@ milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 07
 current_phase_name: API 자격 증명 저장 + 토큰 만료 사전 경고
 status: executing
-stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-08-28T08:42:48.304Z"
+stopped_at: Completed 07-07-PLAN.md
+last_updated: "2026-08-28T08:48:14.829Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 07 execution started
-state_head: 404eb4f3e66a0fb5b6d1a53890f4e34902f33e31
+state_head: 04ed66797fcca20eaf305ffd96e85e021b9f4204
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 20
-  completed_plans: 19
+  completed_plans: 20
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-27)
 ## Current Position
 
 Phase: 07 (API 자격 증명 저장 + 토큰 만료 사전 경고) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 07 execution started
 
@@ -94,6 +94,7 @@ Progress: [████████████████████] 13/13 p
 | Phase 07 P04 | ~15min | 2 tasks | 3 files |
 | Phase 07 P05 | ~20min | 2 tasks | 5 files |
 | Phase 07-api P06 | 6min | 3 tasks | 5 files |
+| Phase 07 P07 | 12min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,8 @@ Recent decisions affecting current work:
 - [Phase 07]: [Phase 07] ROADMAP SC1/REQUIREMENTS R022·R023 Why it matters의 반증된 OTP 서술을 D-11(06) 절차로 정정(VOID+정정문, 원문 보존) — R022 정정문에 D-03(06) 부수효과로 적용범위가 두 모드 전체로 확대됐음을 명시
 - [Phase 07-api]: 07-06: shouldRecheckTokenExpiry() 순수 판정 함수를 App.tsx onAuthEvent 안 단일 지점에 배선해 CR-01(재로그인 완료 후 배너가 안 갱신되는 문제)을 닫음 — AuthService.login() 계약 변경(방향 1) 대신 이벤트 재판정(방향 2, G-01)을 채택
 - [Phase 07-api]: 07-06: WR-01 재로그인 버튼 잠금은 새 state 없이 기존 loginLoading 을 reloginLoading prop 으로 재사용(G-03); credentialLoginStored() 실패 반환값은 기존 buildFailureView() 로 라우팅해 화면에 표시
+- [Phase 07]: G-04: WR-02 closed via a single completeCredentialLoginSuccess() gate (save+cleanup+result) both credentialLogin() success branches funnel through, instead of a one-line saveCredentials() patch on the timeout branch — matches this repo's single-gate precedent (buildFailureResult()/_evaluateCurrentTokenExpiry()/createLoginModeActions()) so a future third success path cannot bypass credential storage.
+- [Phase 07]: G-05: WR-03 closed as a one-line finally-block symmetry fix (refreshStoredSnapshot()) in LoginPanel.tsx's handleCredentialLogin(), matching handleStoredLogin() — no new state or pure function, since resolveStoredLoginState() already covers 26 cases.
 
 ### Pending Todos
 
@@ -173,6 +176,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-28T08:42:48.192Z
-Stopped at: Completed 07-06-PLAN.md
+Last session: 2026-08-28T08:48:14.700Z
+Stopped at: Completed 07-07-PLAN.md
 Resume file: None
