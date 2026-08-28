@@ -123,3 +123,11 @@ None - no external service configuration required.
 ---
 *Phase: 07-api*
 *Completed: 2026-08-28*
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/07-api/07-07-SUMMARY.md`
+- FOUND: `4ddfc7c` (test — RED)
+- FOUND: `17d6529` (feat — GREEN)
+- FOUND: `d2b73ae` (fix — WR-03)
+- `completeCredentialLoginSuccess(` present in `src/main/services/auth-service.ts` at gate definition (L673) and both success-branch call sites (L609, L615)
