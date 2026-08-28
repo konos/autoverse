@@ -590,7 +590,6 @@ export class AuthService extends EventEmitter {
 
       if (result === "token") {
         logService.info("AuthService", "credentialLogin(headless): token obtained directly");
-        this.saveCredentials(email, password);
         // D-12 사다리 실패 행: 로그인은 성공했지만 서비스 토큰 확보에 실패하면
         // 사용자에게도 그 사실이 도달해야 한다 — 로그에만 남기고 끝내지 않는다.
         void this.runAccountTokenLadderSpike("credentialLogin")
@@ -607,15 +606,13 @@ export class AuthService extends EventEmitter {
             );
             this._emit(this.buildLadderFailureEvent(rawDetail));
           });
-        this.cleanupHeadless();
-        return { success: true };
+        return this.completeCredentialLoginSuccess(email, password);
       }
 
       if (result === "timeout") {
         const token = await this.extractTokenFromCookies();
         if (token) {
-          this.cleanupHeadless();
-          return { success: true };
+          return this.completeCredentialLoginSuccess(email, password);
         }
 
         // Dump page state for debugging
@@ -651,6 +648,32 @@ export class AuthService extends EventEmitter {
     } finally {
       this.credentialLoginInFlight = false;
     }
+  }
+
+  /**
+   * `credentialLogin()` 의 두 성공 분기가 공유하는 단일 성공 관문(WR-02,
+   * 07-REVIEW.md, G-04). `credentialLogin()` 에는 성공으로 끝나는 경로가
+   * 둘이다 — DOM 폴링이 토큰을 직접 돌려준 경우(`result === "token"`)와
+   * 25초 timeout 후 쿠키에서 뒤늦게 토큰을 발견한 경우. 이전에는 앞의
+   * 하나만 `saveCredentials()` 를 불렀기 때문에 R023 의 "다음부터 재입력을
+   * 생략한다" 약속이 뒤 경로에서 조용히 성립하지 않았다. 이 관문이 저장 +
+   * 헤드리스 정리 + 성공 결과 생성을 한 곳에서 소유하게 해, 세 번째 성공
+   * 경로가 생겨도 이 관문을 거치지 않고는 `{ success: true }` 를 만들 수
+   * 없는 구조로 만든다.
+   *
+   * 의도적으로 이 관문 밖에 남기는 것: `runAccountTokenLadderSpike()` 호출.
+   * 지금은 `result === "token"` 분기에서만 fire-and-forget 으로 시작되는데,
+   * 이를 관문 안으로 옮기면 timeout→쿠키 경로에도 새 외부 네트워크 호출이
+   * 생긴다. 그것은 WR-02 가 요구한 범위를 넘는 동작 확대이고 실계정 검증
+   * 없이 늘릴 경로가 아니다(G-04) — 이 비대칭은 의도적이다.
+   *
+   * 이 관문은 자체 로그를 남기지 않는다 — 저장 관련 로그는 `saveCredentials()`
+   * 안의 기존 `email.slice(0, 3)***` 마스킹 형태 하나뿐이다(T-07-26).
+   */
+  private completeCredentialLoginSuccess(email: string, password: string): CredentialLoginResult {
+    this.saveCredentials(email, password);
+    this.cleanupHeadless();
+    return { success: true };
   }
 
   /**
