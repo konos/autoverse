@@ -3,7 +3,7 @@
  * 배포되는 코드를 테스트하기 위해서다(login-panel-view.test.ts와 같은 의도적 편차).
  */
 import { describe, it, expect } from "vitest";
-import { decideAuthEventNavigation, type AppStep } from "../auth-event-navigation";
+import { decideAuthEventNavigation, shouldRecheckTokenExpiry, type AppStep } from "../auth-event-navigation";
 import type { AuthEvent } from "../../shared/types";
 
 const ALL_EVENT_TYPES: AuthEvent["type"][] = [
@@ -77,6 +77,45 @@ describe("decideAuthEventNavigation — apply-execution 이 아닌 단계 (기�
 
   it.each(NON_APPLY_EXECUTION_STEPS)("%s 단계에서 credential-login-progress 는 stay 다", (step) => {
     expect(decideAuthEventNavigation("credential-login-progress", step)).toEqual({ action: "stay" });
+  });
+});
+
+describe("shouldRecheckTokenExpiry — 재로그인 완료 시점 재판정 트리거 (CR-01)", () => {
+  it.each([
+    "login-success",
+    "token-validated",
+    "login-failed",
+    "token-expired",
+    "cookie-extraction-failed",
+  ] as AuthEvent["type"][])(
+    "apply-execution 단계에서 %s 는 재판정 대상(true)이다",
+    (eventType) => {
+      expect(shouldRecheckTokenExpiry(eventType, "apply-execution")).toBe(true);
+    },
+  );
+
+  it.each([
+    "credential-login-progress",
+    "logged-out",
+  ] as AuthEvent["type"][])(
+    "apply-execution 단계에서 %s 는 재판정 대상이 아니다(false)",
+    (eventType) => {
+      expect(shouldRecheckTokenExpiry(eventType, "apply-execution")).toBe(false);
+    },
+  );
+
+  it("apply-execution 이 아닌 4개 단계 × 7개 이벤트 = 28조합 전부 false 다 (신청 대기 중이 아니면 재판정할 배너 자체가 없다)", () => {
+    expect(NON_APPLY_EXECUTION_STEPS).toHaveLength(4);
+    expect(ALL_EVENT_TYPES).toHaveLength(7);
+    for (const step of NON_APPLY_EXECUTION_STEPS) {
+      for (const eventType of ALL_EVENT_TYPES) {
+        expect(shouldRecheckTokenExpiry(eventType, step)).toBe(false);
+      }
+    }
+  });
+
+  it("ALL_EVENT_TYPES 는 7개다 — 새 인증 이벤트가 추가되면 이 전수 테스트가 조용히 옛 이벤트만 도는 것을 막는다", () => {
+    expect(ALL_EVENT_TYPES).toHaveLength(7);
   });
 });
 
