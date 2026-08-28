@@ -147,6 +147,13 @@ export default function LoginPanel({
     }
   };
 
+  // WR-03 (07-REVIEW.md): 성공 시 main 이 새 credentials.enc 를 저장하므로
+  // 저장 상태가 실제로 전이된다. 재조회가 없으면 storedSnapshot 이 마운트
+  // 시점 값에 고정돼, 사용자가 corrupted 안내를 보고 지시대로 재입력해
+  // 로그인에 성공한 뒤에도 이미 해소된 안내가 계속 떠 있는다.
+  // refreshStoredSnapshot() 은 이메일 state 가 빈 문자열일 때만 채우므로
+  // 방금 입력한 이메일을 덮어쓰지 않는다 — handleStoredLogin() 의 finally 와
+  // 정확히 같은 대칭이다(G-05).
   const handleCredentialLogin = async () => {
     if (!email || !password) return;
     setCredLoading(true);
@@ -163,6 +170,7 @@ export default function LoginPanel({
       setCredResult({ success: false, reason: "network-error" });
     } finally {
       setCredLoading(false);
+      refreshStoredSnapshot();
     }
   };
 
