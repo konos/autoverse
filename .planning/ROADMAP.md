@@ -153,7 +153,7 @@
 
 **Plans**: 5/7 plans executed (2026-08-27 계획 — 트레이서 선행 + 웨이브 4단계) + 2 gap closure plans (07-06 ~ 07-07, 2026-08-28 계획 — 07-VERIFICATION.md gaps_found 대응)
 
-- [ ] 07-06-PLAN.md
+- [x] 07-06-PLAN.md
 - [ ] 07-07-PLAN.md
 
 **Wave 1**
