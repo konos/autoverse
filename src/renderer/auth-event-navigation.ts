@@ -58,3 +58,43 @@ export function decideAuthEventNavigation(
       return { action: "stay" };
   }
 }
+
+/**
+ * 재로그인이 실제로 끝났는지를 인증 이벤트로부터 판정한다(CR-01, D-10, R022).
+ *
+ * `AuthService.login()`은 팝업의 초기 페이지 로드만 `await`하고 반환하므로
+ * "재로그인 요청이 반환됐다"는 사실은 "재로그인이 끝났다"와 다른 사건이다.
+ * `App.tsx`의 `handleReloginFromWaiting()` `finally` 블록에서 곧바로
+ * `checkTokenExpiry()`를 부르면 옛 토큰으로 판정하게 되는 이유가 이것이다 —
+ * 실제 완료를 알려주는 유일한 신호는 그 뒤에 도착하는 인증 이벤트다.
+ * `login-success`는 브라우저 모드(`pollForToken()`)와 API 모드
+ * (`extractTokenFromCookies()`) 양쪽 모두에서 `cachedToken`을 채운 **직후**
+ * emit되므로, 이 이벤트를 받은 시점의 `authService.token`은 이미 새 토큰이다.
+ *
+ * `apply-execution` 단계가 아니면 재판정할 배너 자체가 없으므로 모든 이벤트에서
+ * `false`다. `apply-execution` 단계에서는 `logged-out`(명시적 로그아웃 —
+ * `decideAuthEventNavigation()`이 화면을 되돌리고 스키마를 비우는 유일한
+ * 이벤트, 배너 자체가 사라진다)과 `credential-login-progress`(진행 중 신호,
+ * 토큰이 아직 바뀌지 않았다)만 `false`이고 나머지 5개 이벤트는 전부 `true`다 —
+ * 실패·만료·쿠키 추출 실패도 정직하게 재판정해야 배너가 거짓말하지 않는다.
+ *
+ * `AuthEvent["type"]` 전체를 덮는 exhaustive switch로 구현하고 default 분기를
+ * 두지 않는다 — 새 인증 이벤트가 추가되면 컴파일 에러로 판단 누락이 드러난다.
+ */
+export function shouldRecheckTokenExpiry(eventType: AuthEvent["type"], step: AppStep): boolean {
+  if (step !== "apply-execution") {
+    return false;
+  }
+
+  switch (eventType) {
+    case "login-success":
+    case "token-validated":
+    case "login-failed":
+    case "token-expired":
+    case "cookie-extraction-failed":
+      return true;
+    case "credential-login-progress":
+    case "logged-out":
+      return false;
+  }
+}

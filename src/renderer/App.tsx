@@ -7,7 +7,7 @@ import ApplyForm from "./components/ApplyForm";
 import ApplyExecution from "./components/ApplyExecution";
 import LogPanel from "./components/LogPanel";
 import { createLoginModeActions as makeLoginModeActions } from "./login-mode-actions";
-import { decideAuthEventNavigation, type AppStep } from "./auth-event-navigation";
+import { decideAuthEventNavigation, shouldRecheckTokenExpiry, type AppStep } from "./auth-event-navigation";
 import "./styles.css";
 
 export default function App() {
@@ -62,6 +62,17 @@ export default function App() {
       // 두 setter 모두 호출되지 않아 armed 상태와 formSchema 가 보존된다
       // (Pitfall 3).
       const decision = decideAuthEventNavigation(event.type, stepRef.current);
+
+      // CR-01: 재로그인이 실제로 끝났음을 알리는 신호(login-success 등)가 도착한
+      // 시점에만 만료를 재판정한다(D-10) — 이벤트 종류별 분기 밖의 단일 지점.
+      // AuthService.login()의 반환은 팝업 초기 로드일 뿐 로그인 완료가 아니므로,
+      // handleReloginFromWaiting()의 finally 재판정(옛 토큰 기준)만으로는 배너가
+      // 갱신되지 않는다 — 이 호출이 진짜 완료 시점의 재판정이다.
+      if (shouldRecheckTokenExpiry(event.type, stepRef.current)) {
+        void window.api.apply
+          .checkTokenExpiry()
+          .catch((err) => console.error("만료 재판정 실패:", err));
+      }
 
       if (event.type === "login-success") {
         setLoginError(null);
@@ -227,9 +238,13 @@ export default function App() {
       setLoginError(err instanceof Error ? err.message : "재로그인 중 오류가 발생했습니다.");
     } finally {
       try {
-        // 재로그인 시도가 끝나면 성공·실패 무관하게 새 토큰으로 만료를
-        // 재판정한다(D-10). 이 호출 자체의 실패가 재로그인 흐름을 막지
-        // 않도록 별도로 감싼다.
+        // G-02: 이 시점은 팝업이 열린 직후(브라우저 모드) 또는 저장 자격증명
+        // 로그인 IPC 가 반환된 직후일 뿐, 로그인이 "끝난" 시점이 아니다 —
+        // 실제 완료 후 재판정은 onAuthEvent → shouldRecheckTokenExpiry() 경로가
+        // 담당한다(CR-01). 이 자리는 삭제하지 않는다 — API 모드의 none/
+        // corrupted/unavailable 분기처럼 인증 이벤트가 아예 발생하지 않는
+        // 실패 경로에서는 이것이 유일한 재판정 트리거다. 이 호출 자체의
+        // 실패가 재로그인 흐름을 막지 않도록 별도로 감싼다.
         await window.api.apply.checkTokenExpiry();
       } catch {
         // best-effort — 재판정 실패를 사용자에게 별도로 알리지 않는다.
