@@ -8,6 +8,8 @@ interface ApplyExecutionProps {
   applyPeriod: ApplyPeriod;
   eventId: string;
   onRelogin: () => void;
+  /** WR-01: 재로그인 시도 진행 중 여부 — "다시 로그인" 버튼의 disabled/aria-busy 를 잠근다. */
+  reloginLoading: boolean;
 }
 
 const PHASE_LABELS: Record<ApplyPhase, string> = {
@@ -68,7 +70,7 @@ function formatKST(iso: string): string {
   }
 }
 
-export default function ApplyExecution({ onReset, applyPeriod, eventId, onRelogin }: ApplyExecutionProps) {
+export default function ApplyExecution({ onReset, applyPeriod, eventId, onRelogin, reloginLoading }: ApplyExecutionProps) {
   const [phase, setPhase] = useState<ApplyPhase>("armed");
   const [events, setEvents] = useState<ApplyEvent[]>([]);
   const [result, setResult] = useState<ApplyResult | null>(null);
@@ -243,6 +245,8 @@ export default function ApplyExecution({ onReset, applyPeriod, eventId, onRelogi
                 type="button"
                 className="btn btn-secondary"
                 onClick={onRelogin}
+                disabled={reloginLoading}
+                aria-busy={reloginLoading}
                 style={{ marginTop: "0.5rem", fontSize: "0.8rem", padding: "0.35rem 0.75rem" }}
               >
                 다시 로그인

@@ -8,6 +8,7 @@ import ApplyExecution from "./components/ApplyExecution";
 import LogPanel from "./components/LogPanel";
 import { createLoginModeActions as makeLoginModeActions } from "./login-mode-actions";
 import { decideAuthEventNavigation, shouldRecheckTokenExpiry, type AppStep } from "./auth-event-navigation";
+import { buildFailureView } from "./components/login-panel-view";
 import "./styles.css";
 
 export default function App() {
@@ -220,9 +221,14 @@ export default function App() {
       } else {
         const snapshot = await window.api.auth.getStoredCredentials();
         switch (snapshot.state) {
-          case "available":
-            await window.api.auth.credentialLoginStored(snapshot.email);
+          case "available": {
+            const result = await window.api.auth.credentialLoginStored(snapshot.email);
+            const view = buildFailureView(result);
+            if (view.visible) {
+              setLoginError(view.message);
+            }
             break;
+          }
           case "none":
             setLoginError("저장된 로그인 정보가 없습니다 — 비밀번호를 입력해 로그인해주세요.");
             break;
@@ -293,6 +299,10 @@ export default function App() {
           applyPeriod={formSchema.applyPeriod}
           eventId={formSchema.eventPublicId}
           onRelogin={handleReloginFromWaiting}
+          // G-03: 별도 state 를 만들지 않는다 — handleReloginFromWaiting() 이
+          // 이미 이 값을 시작/종료 시점에 set/clear 하므로 재로그인 진행 여부의
+          // 정본은 loginLoading 하나다(같은 사실의 출처를 둘로 늘리지 않는다).
+          reloginLoading={loginLoading}
         />
       )}
 
