@@ -997,6 +997,82 @@ describe("AuthService.credentialLogin — 중복 실행 가드 (T-07-09)", () =>
   });
 });
 
+// ── completeCredentialLoginSuccess — WR-02 회귀 (07-REVIEW.md, R023) ────────
+//
+// credentialLogin() 의 두 성공 분기(폴링이 토큰을 직접 돌려준 경우 / timeout 후
+// 쿠키에서 뒤늦게 찾은 경우)가 공유하는 단일 성공 관문. cleanupHeadless() 는
+// this.headlessWindow 가 없으면 아무 일도 하지 않으므로 이 테스트들은 헤드리스
+// 창 목을 만들지 않고 관문을 직접 호출해도 안전하다.
+
+interface PrivateCompleteCredentialLoginSuccess {
+  completeCredentialLoginSuccess(email: string, password: string): CredentialLoginResult;
+}
+
+function asCompleteSuccess(service: AuthService): PrivateCompleteCredentialLoginSuccess {
+  return service as unknown as PrivateCompleteCredentialLoginSuccess;
+}
+
+describe("AuthService.completeCredentialLoginSuccess — 단일 성공 관문 (WR-02, R023)", () => {
+  beforeEach(() => {
+    clearStoredCredentialsFile();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearStoredCredentialsFile();
+  });
+
+  it("관문 호출 후 getStoredCredentialsSnapshot() 이 available + 저장 이메일을 돌려준다", () => {
+    const service = new AuthService();
+
+    asCompleteSuccess(service).completeCredentialLoginSuccess("wr02@example.com", "wr02-pw");
+
+    expect(service.getStoredCredentialsSnapshot()).toEqual({
+      state: "available",
+      email: "wr02@example.com",
+    });
+  });
+
+  it("반환값이 { success: true } 이고 비밀번호 필드를 포함하지 않는다", () => {
+    const service = new AuthService();
+
+    const result = asCompleteSuccess(service).completeCredentialLoginSuccess(
+      "wr02@example.com",
+      "wr02-pw",
+    );
+
+    expect(result).toEqual({ success: true });
+    expect("password" in result).toBe(false);
+  });
+
+  it("safeStorage.isEncryptionAvailable() 이 false 인 환경에서는 파일을 만들지 않고도 { success: true } 를 반환한다", async () => {
+    const electron = await import("electron");
+    vi.mocked(electron.safeStorage.isEncryptionAvailable).mockReturnValueOnce(false);
+    const service = new AuthService();
+
+    const result = asCompleteSuccess(service).completeCredentialLoginSuccess(
+      "wr02@example.com",
+      "wr02-pw",
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(fs.existsSync(TEST_CREDENTIALS_PATH)).toBe(false);
+  });
+
+  it("관문이 남긴 로그 어디에도 비밀번호 원문과 전체 이메일이 없다", () => {
+    const service = new AuthService();
+    const infoSpy = vi.spyOn(logService, "info");
+
+    asCompleteSuccess(service).completeCredentialLoginSuccess("wr02@example.com", "secret-pw-value");
+
+    const loggedStrings = infoSpy.mock.calls.map((call) => call.join(" "));
+    for (const line of loggedStrings) {
+      expect(line).not.toContain("secret-pw-value");
+      expect(line).not.toContain("wr02@example.com");
+    }
+  });
+});
+
 // ── validateToken() 실패 emit 관문 (Task 2, 06-VERIFICATION.md gap 2 / CR-02) ──
 //
 // 두 로그인 모드가 공유하는 validateToken() 의 네 실패 지점이 서버 응답 원문을 더 이상
