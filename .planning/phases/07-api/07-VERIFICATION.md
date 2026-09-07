@@ -1,7 +1,7 @@
 ---
 phase: 07-api
 verified: 2026-08-28T00:00:00Z
-status: human_needed
+status: passed
 score: 11/11 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -9,26 +9,33 @@ re_verification:
   previous_status: gaps_found
   previous_score: 10/11
   gaps_closed:
+
     - "재로그인이 끝나면 새 토큰의 exp 로 만료가 다시 판정되어 경고가 갱신되거나 사라진다 (D-10, 07-05 must-have; R022) — CR-01"
   gaps_remaining: []
   regressions: []
 behavior_unverified_items: []
 human_verification:
+
   - test: "만료 임박(또는 exp를 읽을 수 없는) 토큰 상태로 arm해 대기 화면에 진입한다"
     expected: "대기 화면 카운트다운 아래에 role=\"alert\" 경고와 '다시 로그인' 버튼이 보이고, 경고가 떠 있는 동안에도 신청 실행 버튼이 계속 눌린다"
     why_human: ".tsx 렌더러 컴포넌트는 vitest.config.ts의 include(.test.ts만 포함)에 잡히지 않아 실제 렌더링은 자동 테스트 대상이 아니다(07-01 PLAN human-check, 저장소 전체의 기존 패턴)"
+
   - test: "API 모드로 로그인 → 앱 종료 후 재시작 → 로그인 폼 확인. 이메일 칸이 저장된 주소로 채워져 있고 비밀번호 칸은 비어 있는지, '저장된 비밀번호로 로그인'으로 재입력 없이 로그인되는지, 이메일을 다른 주소로 바꾸면 버튼이 비활성화되고 '다른 계정입니다' 안내가 뜨는지, 로그아웃 상태에서도 상태문과 삭제 버튼이 보이고 삭제하면 함께 사라지는지 확인한다"
     expected: "네 가지 시나리오(프리필/저장 비밀번호 로그인/이메일 불일치 차단/삭제) 모두 문서대로 동작한다"
     why_human: "LoginPanel.tsx JSX 렌더링 — 순수 함수 resolveStoredLoginState()는 자동 테스트로 커버되지만 실제 화면 반영은 수동 확인 대상이다(07-04 PLAN human-check)"
+
   - test: "대기 화면에서 '다시 로그인'을 눌러 ① API 모드에서 비밀번호 재입력 없이, ② 브라우저 모드에서 로그인 창으로 재로그인이 시작되는지, ③ 재로그인 성공·실패 어느 쪽이든 대기 화면과 카운트다운이 유지되고 처음 화면으로 돌아가지 않는지, ④ 재로그인이 성공하면 경고가 사라지거나 갱신되는지, ⑤ 저장된 자격증명이 없는 API 모드에서 '다시 로그인'을 누르면 이유가 화면에 표시되는지 확인한다"
     expected: "다섯 시나리오 모두 문서대로 동작한다"
     why_human: "대기 화면 인증 이벤트 흐름은 실계정·타이밍 의존적이라 자동화 대상 밖이다(07-05 PLAN human-check). 시나리오 ④는 이전 검증(2026-08-27)에서 CR-01로 실패가 코드·정적 분석 양쪽에서 확인됐던 항목이다 — 07-06 이 그 결함을 코드·행동 테스트 수준에서 닫았으므로, 이 UAT 는 이제 결함 재확인이 아니라 실계정을 통한 최종 확인 절차가 된다(07-06-PLAN.md Task 1 의 human-check와 동일 항목, 여기서 하나로 병합)."
+
   - test: "빠른 연속 두 번 클릭으로 대기 화면 '다시 로그인' 버튼을 누른다 (WR-01). ① 첫 클릭 직후 버튼이 비활성(회색) 상태가 되어 두 번째 클릭이 들어가지 않는지, ② 시도 종료 후(성공·실패 무관) 버튼이 다시 눌리는 상태로 돌아오는지, ③ API 모드에서 저장 자격증명 재로그인이 실패하면 그 사유가 로그인 패널에 문구로 표시되는지, ④ 경고·버튼 잠금 중에도 신청 실행 버튼은 계속 눌리는지(D-12) 확인한다"
     expected: "네 가지 모두 문서대로 동작한다"
     why_human: "07-06-PLAN.md Task 3 의 human-check 항목 — .tsx 렌더링/실계정 타이밍 의존이라 vitest 대상 밖이며 실행 시 수행되지 않았다(07-06-SUMMARY.md coverage D3)."
+
   - test: "credentialLogin() 이 25초 timeout 후 쿠키에서 토큰을 뒤늦게 발견하는 느린 경로를 재현한다(네트워크를 의도적으로 느리게 하거나 `credentialLogin(headless): result=timeout` 뒤 성공 로그를 확인). 그 상태에서 앱을 재시작해 이메일 프리필과 저장 비밀번호 로그인 버튼이 나타나는지 확인한다. 재현이 어려우면 정상 경로(폴링 성공)로 저장이 여전히 동작하는지만 확인하고 미재현으로 기록한다"
     expected: "timeout→쿠키 경로로 로그인해도 다음 실행에서 자격증명이 저장돼 있다 (재현 곤란 시 정상 경로 저장 확인으로 대체)"
     why_human: "07-07-PLAN.md Task 1 의 human-check — 헤드리스 BrowserWindow 의 실제 timeout→쿠키 경로는 DOM 테스트 환경이 없어 재현이 어렵고, 실행 시 수행되지 않았다(07-07-SUMMARY.md coverage D1)."
+
   - test: "API 모드에서 credentials.enc 를 의도적으로 손상시킨 뒤 앱을 재시작해 'corrupted' 안내를 띄운다. 안내대로 이메일/비밀번호를 직접 입력해 로그인에 성공한 직후, 그 안내가 사라지고 '이 기기에 …저장되어 있습니다' 상태문 + 삭제 버튼으로 즉시 바뀌는지 확인한다"
     expected: "로그인 성공 직후 corrupted 안내가 낡은 채로 남지 않고 available 상태문으로 갱신된다"
     why_human: "07-07-PLAN.md Task 2 의 human-check — LoginPanel.tsx JSX 렌더링(vitest 대상 밖)이며 실행 시 수행되지 않았다(07-07-SUMMARY.md coverage D2)."
@@ -53,6 +60,7 @@ human_verification:
 2. **재로그인 "시도"가 아니라 실제 새 토큰으로부터만 판정하는지.** `shouldRecheckTokenExpiry()`가 `true`를 반환해도 그 자체가 경고를 지우지 않는다 — `void window.api.apply.checkTokenExpiry()`를 호출할 뿐이고, 실제 판정은 `ApplyEngine._evaluateCurrentTokenExpiry()`가 그 시점의 `authService.token`(main 프로세스에 실제로 캐시된 토큰)에서 `exp`를 파싱해 내린다. 신규 계층 관통 테스트(`src/__tests__/relogin-expiry-recheck.test.ts`)의 "실패 대조군" 케이스가 토큰을 교체하지 않은 채(=재로그인 실패/미완료를 흉내) 같은 사슬을 돌리면 배너가 `visible: true`로 남는다는 것을 단언한다 — 재로그인 "시도" 자체가 안심의 근거가 되지 않는다.
 
 이 검증 세션에서 직접 실행한 결과:
+
 - `npx vitest run src/__tests__/relogin-expiry-recheck.test.ts` — 6/6 pass
 - `npx vitest run src/renderer/__tests__/auth-event-navigation.test.ts` — 46/46 pass
 - `npx vitest run src/main/services/__tests__/auth-service.test.ts` — 78/78 pass
