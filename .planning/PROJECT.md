@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스크탑 앱. 본인 단일 계정으로 서버 시간 동기화 후 정시에 POST가 도착하도록 정밀 타이밍 신청을 수행한다. 특정 소수 고객(팬)에게 제공하며 Windows/macOS 크로스플랫폼으로 배포한다. **M001-ksbtje MVP 완성 — 2026-05-13.**
+Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스크탑 앱. 본인 단일 계정으로 서버 시간 동기화 후 정시에 POST가 도착하도록 정밀 타이밍 신청을 수행한다. 사용자는 로그인 방식(API 통신 / 브라우저)을 선택할 수 있고, API 모드에서는 자격증명이 OS 수준으로 암호화 저장돼 재입력이 생략되며 신청 대기 중 토큰 만료가 예상되면 사전에 경고를 받는다. 특정 소수 고객(팬)에게 제공하며 Windows/macOS 크로스플랫폼으로 배포한다. **M001-ksbtje MVP 완성 — 2026-05-13. v0.3.0 완료 — 2026-09-07.**
 
 ## Core Value
 
@@ -15,11 +15,21 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 
 ## Current State
 
+**v0.3.0 SHIPPED — 2026-09-07.** 3개 페이즈(05·06·07) / 20개 플랜 전부 실행, 전 페이즈 verification `passed`. 테스트 474개 green, typecheck 2종 green, 신규 외부 의존성 0건. 보안 위협 74건 CLOSED(Phase 06 44건 + Phase 07 30건), 두 페이즈 모두 `threats_open: 0`.
+
+**코드베이스 현황:** `src/` 12,188 LOC (TypeScript/TSX), 테스트 파일 22개. v0.3.0 구간 `src/` diff — 39 파일, +6,485 / −352. 14일(2026-08-25 → 2026-09-07), 커밋 157개(feat 31).
+
 **M001-ksbtje 완료 (2026-05-13), 이후 v0.2.0에서 로그인을 헤드리스 방식으로 전환.** 4개 슬라이스 전부 complete, 163개 단위 테스트 통과, tsc 오류 0, macOS .dmg 95MB + Windows .exe 84MB 아티팩트 생성 완료.
+
+**알려진 기술 부채:**
+- `.tsx` 렌더러 컴포넌트가 `vitest.config.ts` 의 include(`.test.ts` 만)에 잡히지 않아 렌더링 경로에 자동 회귀망이 없다 — Phase 07 UAT 6항목이 전부 사람 확인 전용이 된 원인.
+- `saveCredentials()` 가 원자적 쓰기(tmp+rename)를 쓰지 않는다. 부분 쓰기는 손상 감지→삭제→재입력 경로로 수렴하지만 근본 해결은 아니다.
+- R019 rung2(명시적 account→fanevent 토큰 교환) 미검증 — rung1 이 성립해 사다리가 조기 종료됐다.
+- 실계정 관측 당시 로그(`logs/2026-08-25.log`)에 토큰 평문이 남아 있다. T-05-17 수정은 소급 적용되지 않으므로 사용자가 직접 정리해야 한다.
 
 **v0.3.0 전체 phase 완료 (2026-09-07)** — 클라이언트 요청으로 로그인 방식(API 통신 / 브라우저) 선택 기능 추가. Phase 05(R019 사다리 검증) · Phase 06(로그인 방식 선택 UI + 실패 안내) · Phase 07(자격증명 저장 + 토큰 만료 사전 경고) 전부 완료. 마일스톤 종료 처리(`/gsd-complete-milestone`)만 남았다. **Phase 07 종료 시점 (2026-09-07):** 플랜 7/7 실행(트레이서 + 웨이브 4단계 5개 + gap closure 2개), 테스트 474개 green, typecheck 2종 green, 신규 의존성 0건, UAT 6/6 통과, 보안 위협 30건 전부 CLOSED(`threats_open: 0`, accept 6건은 R-07-01~06 으로 기록).
 
-## Current Milestone: v0.3.0 로그인 방식 선택 (API / 브라우저)
+## Shipped Milestone: v0.3.0 로그인 방식 선택 (API / 브라우저) — ✅ 2026-09-07
 
 **Goal:** 사용자가 로그인 방식을 API 통신과 브라우저 중 선택할 수 있게 하고, 각 방식의 제약을 앱이 명확히 안내한다.
 
@@ -82,8 +92,6 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - [ ] R006 실시간 동작 로그 패널 + 로그 파일 다운로드
 - [ ] R008 Windows .exe + macOS .dmg 크로스플랫폼 빌드 배포
 - [ ] R010 개인정보 로그 마스킹
-- [ ] R017 API 자격증명 로그인 (실측 계약 — `by-credentials` 단독 + reCAPTCHA) — v0.3.0
-- [ ] R018 이메일 OTP 코드 입력 및 인증 — **보류 (blocked, Phase 매핑 해제)** — HAR 상 OTP 단계 부재로 미입증
 
 ### Out of Scope
 
@@ -92,11 +100,13 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - R013 캡차 우회 — anti-feature. 약관 위반. 영구 제외
 - R014 라이선스/배포 제한 — 스코프 축소를 위해 제외
 - R015 토큰 자체 갱신 — 갱신 엔드포인트 미캡처. 재로그인 안내로 대체 (R022가 이를 구현)
+- R017 API 자격증명 로그인(순수 HTTP 경로) — **v0.3.0 종료 시 이동 (2026-09-07).** 계약 자체는 05-01 HAR 실측으로 확정됐으나("`by-credentials` 단독 + reCAPTCHA Enterprise 토큰 필수"), 캡차 관문이 사람/브라우저 개입을 요구해 "브라우저 엔진 없이" 라는 요건이 구조적으로 성립하지 않는다. 우회는 R013 으로 영구 제외. 동작하는 유일한 경로는 헤드리스 BrowserWindow 다
+- R018 이메일 OTP 코드 입력 및 인증 — **v0.3.0 종료 시 blocked → out-of-scope (2026-09-07).** HAR 실측 호출 0건 — 미구현이 아니라 대상 자체가 실제 로그인 흐름에 존재하지 않는다. Phase 06 D-02 가 관련 코드를 전량 삭제했다
 
 ## Milestone Sequence
 
 - [x] M001-ksbtje: Weverse 팬이벤트 선착순 신청 자동화 앱 — 로그인, 신청 엔진, 로그 시스템, 크로스플랫폼 빌드까지 전체 MVP — **완료 2026-05-13**
-- [ ] v0.3.0: 로그인 방식 선택 (API 통신 / 브라우저) — **진행 중**
+- [x] v0.3.0: 로그인 방식 선택 (API 통신 / 브라우저) — 방식 선택 UI, 실패 안내 단일 관문, 자격증명 암호화 저장, 토큰 만료 사전 경고 — **완료 2026-09-07**
 
 ## Out of Scope
 
@@ -155,4 +165,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-07 after Phase 07*
+*Last updated: 2026-09-07 after v0.3.0 milestone*

@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
-current_phase: 07
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 07 complete — all phases complete
-last_updated: "2026-09-07T03:28:53.529Z"
+last_updated: "2026-09-07T04:15:00.641Z"
 last_activity: 2026-09-07
-last_activity_desc: Phase 07 complete
-state_head: bee8518bd8ea4ae0e1a483abd686b7908663d1fc
+last_activity_desc: Milestone v0.3.0 completed and archived
+state_head: 492642adf8816cdc1a1a5f3519900340ba1ec2ba
 progress:
   total_phases: 3
   completed_phases: 3
   total_plans: 20
   completed_plans: 20
   percent: 100
+current_phase: 07
 ---
 
 # Project State
@@ -28,26 +28,10 @@ See: .planning/PROJECT.md (updated 2026-09-07)
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-09-07 — Phase 07 complete
-
-**Phase 07 결과 (완료 2026-09-07):** 7개 플랜(트레이서 + 웨이브 4단계 5개 + gap closure 2개) 전부 실행. R022/R023 validated. UAT 6/6 통과(전부 사람 확인 — `.tsx` 렌더링·실계정 타이밍 의존으로 vitest 대상 밖). `07-SECURITY.md` 위협 30건 전부 CLOSED(`threats_open: 0`, accept 6건은 R-07-01~06 으로 기록). 테스트 474개 green, typecheck 2종 green, 신규 의존성 0건. Phase 06 이월 2건(WR-04 설정 IPC 런타임 검증 · IN-01 설정 읽기 오류 로그 문구)은 07-03 에서 폐쇄. `07-VERIFICATION.md` 의 CR-01(재로그인 성공 시 경고 미해제, blocker)은 07-06 이 `shouldRecheckTokenExpiry()` 판정 seam + 실패 대조군 회귀 테스트로 닫았고, WR-02(timeout→쿠키 경로 저장 누락)/WR-03(낡은 4상태 안내)은 07-07 이 단일 성공 관문 수렴 + `finally` 스냅샷 재조회로 닫았다.
-
-**Phase 06 결과 (완료 2026-08-27):** 10개 플랜 + 3개 gap closure 플랜 전부 실행. R016/R020/R021 validated. UAT 48/48 통과(자동 커버 39 + 사람 확인 9), `06-SECURITY.md` 위협 44건 전부 CLOSED(`threats_open: 0`, accept 2건은 AR-01/AR-02 로 기록). 테스트 354개 green, typecheck 2종 + build green, 신규 의존성 0건. `06-REVIEW.md` 10개 발견 전부 처리 — WR-04/IN-01 은 Phase 07 로 이월, IN-04(모달 `max-height`)는 UAT Test 2 실행 확인으로 해소.
-
-**Phase 05 결과 (완료 2026-08-25):** R019 사다리는 **rung1(직접 사용)이 실계정에서 성립**함을 1회 관측으로 확인했다 (계정 도메인 쿠키 JWT → `/fans/me` 200 + fanId). rung2(명시적 교환)는 미실행으로 여전히 미검증이다. 로그인 방식 최종 결정(D-04)은 Phase 06 에서 내려졌다 — 브라우저 기본값 유지, API 는 차단형 고지 후 선택.
-
-**배경 (유지):** 구 halt 사유(`POST /v4/auth/token/by-credentials` 의 `otpSessionId` 필드가 OTP
-세션 ID 가 아니라 reCAPTCHA Enterprise 토큰이며 실제 로그인 흐름에 OTP 단계가 없다는 HAR 증거)는
-그대로 유효하다. 이 사실을 전제로 Phase 05 를 **R019 사다리 검증 스파이크**로 재정의했다 —
-이미 동작하는 헤드리스 브라우저 로그인으로 account 토큰을 확보하고(D-02), `acquireFaneventToken()`
-사다리의 rung1/rung2 를 실계정으로 판정한다(D-03). 로그인 방식의 최종 결정은 사다리 결과 이후다(D-04).
-구 05-01(halted)/05-02(blocked) 플랜은 폐기·대체됐다. 정본 근거: `.planning/phases/05-api/05-01-SUMMARY.md`,
-결정 사항: `.planning/phases/05-api/05-CONTEXT.md`
-
-Progress: [████████████████████] 20/20 plans ([██████████] 100%) · 페이즈 3/3 완료 (100%) — v0.3.0 전체 phase 완료, 마일스톤 종료 처리 대기
+Phase: Milestone v0.3.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-07 — Milestone v0.3.0 completed and archived
 
 ## Performance Metrics
 
@@ -185,3 +169,7 @@ None yet.
 Last session: 2026-08-28T08:48:14.700Z
 Stopped at: Phase 07 complete — all phases complete
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
