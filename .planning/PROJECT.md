@@ -17,7 +17,7 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 
 **M001-ksbtje 완료 (2026-05-13), 이후 v0.2.0에서 로그인을 헤드리스 방식으로 전환.** 4개 슬라이스 전부 complete, 163개 단위 테스트 통과, tsc 오류 0, macOS .dmg 95MB + Windows .exe 84MB 아티팩트 생성 완료.
 
-**현재 v0.3.0 진행 중** — 클라이언트 요청으로 로그인 방식(API 통신 / 브라우저) 선택 기능 추가. Phase 05(R019 사다리 검증) · Phase 06(로그인 방식 선택 UI + 실패 안내) 완료, Phase 07(자격증명 저장 + 토큰 만료 사전 경고) 남음. **Phase 06 종료 시점 (2026-08-27):** 테스트 354개 green, typecheck 2종 + build green, 신규 의존성 0건, UAT 48/48 통과, 보안 위협 44건 전부 CLOSED(`threats_open: 0`).
+**v0.3.0 전체 phase 완료 (2026-09-07)** — 클라이언트 요청으로 로그인 방식(API 통신 / 브라우저) 선택 기능 추가. Phase 05(R019 사다리 검증) · Phase 06(로그인 방식 선택 UI + 실패 안내) · Phase 07(자격증명 저장 + 토큰 만료 사전 경고) 전부 완료. 마일스톤 종료 처리(`/gsd-complete-milestone`)만 남았다. **Phase 07 종료 시점 (2026-09-07):** 플랜 7/7 실행(트레이서 + 웨이브 4단계 5개 + gap closure 2개), 테스트 474개 green, typecheck 2종 green, 신규 의존성 0건, UAT 6/6 통과, 보안 위협 30건 전부 CLOSED(`threats_open: 0`, accept 6건은 R-07-01~06 으로 기록).
 
 ## Current Milestone: v0.3.0 로그인 방식 선택 (API / 브라우저)
 
@@ -28,7 +28,8 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - ~~이메일 OTP 입력 흐름 — API 모드는 매 로그인마다 OTP 필수~~ **[VOID 2026-08-25]** HAR 호출 0건 — OTP 단계 자체가 실제 로그인 흐름에 없다 (R018 보류). 근거: `.planning/phases/05-api/05-01-SUMMARY.md`
 - 토큰 교환 — account 토큰(`wa_access_token`) → 팬이벤트용 `we2_access_token`
 - ✓ 방식 선택 UI — 브라우저 모드 기본값, API는 선택 옵션 **(Phase 06 완료)** — 차단형 고지 모달 · 환경변수 잠금 배지 · 6개 실패 사유 한국어 안내 포함
-- 토큰 만료 사전 경고 — 신청 시각 전 토큰 수명 체크 후 재로그인 유도
+- ✓ 토큰 만료 사전 경고 — 신청 시각 전 토큰 수명 체크 후 재로그인 유도 **(Phase 07 완료)** — `arm()` 즉시 판정 + 대기 화면 인라인 경고 · 대기 중 재로그인 · 재로그인 완료 시 자동 재판정
+- ✓ API 모드 자격증명 암호화 저장 — safeStorage 저장 + 이메일 프리필 + 저장 비밀번호 로그인 **(Phase 07 완료)** — 평문 비밀번호는 IPC·렌더러·React state 어디에도 존재하지 않는다(D-01)
 
 **계정 API 계약 (2026-08-25 HAR 실측으로 정정):**
 
@@ -73,6 +74,8 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - ✓ R016 로그인 방식 선택 (API 통신 / 브라우저) — v0.3.0 / Phase 06 (`settings.json` 영속 + `AUTOVERSE_LOGIN_MODE` 잠금, UAT Test 1·4·7 실행 확인)
 - ✓ R020 API 로그인 실패 사유 한국어 안내 — v0.3.0 / Phase 06 (`mapLoginFailure()` 6개 신호 전수 매핑, UAT Test 8 실행 확인)
 - ✓ R021 API 모드 제약 사전 고지 — v0.3.0 / Phase 06 (차단형 `<dialog>` 고지 모달, UAT Test 1·2·3 실행 확인)
+- ✓ R022 신청 시각 전 토큰 수명 체크 및 재로그인 유도 — v0.3.0 / Phase 07 (`token-expiry.ts` 순수 판정 + `arm()` 즉시 경고 + 대기 중 재로그인 + `shouldRecheckTokenExpiry()` 재판정 seam, UAT Test 1·3·4 실행 확인)
+- ✓ R023 API 모드 자격증명 암호화 저장 — v0.3.0 / Phase 07 (safeStorage 저장 + `credentials.enc` 4상태 읽기 + 이메일 불일치 메인 게이트, UAT Test 2·5·6 실행 확인)
 
 ### Active
 
@@ -81,8 +84,6 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 - [ ] R010 개인정보 로그 마스킹
 - [ ] R017 API 자격증명 로그인 (실측 계약 — `by-credentials` 단독 + reCAPTCHA) — v0.3.0
 - [ ] R018 이메일 OTP 코드 입력 및 인증 — **보류 (blocked, Phase 매핑 해제)** — HAR 상 OTP 단계 부재로 미입증
-- [ ] R022 신청 시각 전 토큰 수명 체크 및 재로그인 유도 — v0.3.0 / Phase 07
-- [ ] R023 API 모드 자격증명 암호화 저장 — v0.3.0 / Phase 07
 
 ### Out of Scope
 
@@ -108,7 +109,7 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | 브라우저 모드를 기본값으로 유지 | ~~API 모드는 매 로그인 OTP가 강제되어~~ **(2026-08-25 근거 정정)** API 모드는 매 로그인 reCAPTCHA 관문에 막혀 무인 실행이 불가능하다 — 결론은 유지, 사유가 바뀌었다 | ✓ Good (근거 강화) |
-| API 모드 토큰 만료는 사전 경고로 대응 | 자동 재로그인이 불가능하므로, 이벤트를 놓치기 전에 사용자가 개입할 시간을 준다 | — Pending |
+| API 모드 토큰 만료는 사전 경고로 대응 | 자동 재로그인이 불가능하므로, 이벤트를 놓치기 전에 사용자가 개입할 시간을 준다 | ✓ Good — Phase 07 에서 R022 로 구현·검증 완료 |
 | 로그인 API를 리버싱해 직접 호출 | 번들 분석 + 실서버 프로브로 계약을 검증함 (2026-08-25) | ⚠️ 부분 무효 — 번들 분석만으로는 `otpSessionId` 가 캡차 토큰임을 구분하지 못했다. HAR 실측이 계약을 정정 (05-01-SUMMARY.md) |
 | [Phase 05] 반증된 계약을 삭제 대신 VOID 마킹으로 보존 | 틀린 전제가 코드보다 넓게 전파된다는 것을 05-01 이 실증했다 — 왜 틀렸는지를 남겨야 재발을 막는다 | ✓ Good |
 | [Phase 05] R019 는 1회 실계정 관측으로 판정 | 반복 가능한 자동 테스트로는 얻을 수 없는 신호이며, 반복 로그인은 계정 리스크를 키운다 | ✓ Good — rung1 성립 확인 |
@@ -118,6 +119,14 @@ Weverse 팬이벤트 선착순(FIFO) 신청을 자동화하는 Electron 데스�
 | [Phase 06] R021 고지를 비차단 배너가 아닌 네이티브 `<dialog>.showModal()` 차단형 모달로 구현 | "확인해야만 진행"이라는 요건은 비차단 표시로는 구조적으로 성립하지 않는다. 확인/취소 경로를 물리적으로 분리해 Esc 가 확인으로 오인되지 않게 한다 | ✓ Good — UAT Test 1·2·3 실행 확인 |
 | [Phase 06] 마스킹을 main 프로세스 단일 관문(`buildFailureResult()`/`_emit()`)으로 집중 | 렌더러가 재가공하면 이중 지점이 생겨 어느 쪽이 진실인지 모호해진다. 렌더러의 `maskSensitive` 호출 0건을 grep 게이트로 강제 | ✓ Good — T-06-06/17/24/34/35 CLOSED |
 | [Phase 06] CR-02 처치로 `maskSensitive()` 감싸기(A안) 대신 구조적 제거(B안) 채택 | `SENSITIVE_PATTERNS` 가 `key: value` 문맥에 의존해, 키 접두사 없는 토큰 문자열은 감싸도 통과한다. 서버 텍스트를 담을 수 없는 타입으로 봉인하는 편이 보장이 강하다 | ✓ Good — 문맥 무관 JWT 규칙을 2차 방어선으로 추가(06-10) |
+| [Phase 07] D-01: 비밀번호를 IPC 경계 너머로 절대 보내지 않음 — 이메일만 프리필 | 저장 비밀번호를 input 칸에 되채우면 렌더러 메모리·DevTools·스크린샷에 평문이 상주한다. "재입력 없이 로그인"이라는 사용자 체감은 IPC 인자를 이메일 하나로 두고 메인이 복호화·전송하는 것으로 충족된다 | ✓ Good — `StoredCredentialsSnapshot`/`CredentialLoginResult` 어디에도 password 필드가 없어 타입 수준에서 강제됨(T-07-01/27 CLOSED) |
+| [Phase 07] D-03: 저장 자격증명 이메일 일치 판정을 렌더러 `disabled` 가 아닌 메인 게이트로 | 05-01 에서 렌더러 게이트 누락으로 타 계정에 헤드리스 로그인이 시도돼 실제 알림 메일이 발송된 사고가 근거다. 렌더러 비활성화는 안내이지 관문이 아니다 | ✓ Good — `auth-service.ts` 가 trim+lowercase 정규화 비교 후 불일치 시 `credentialLogin()` 을 호출하지 않음(T-07-02 CLOSED) |
+| [Phase 07] D-11: `exp` 판독 실패를 "만료 아님"으로 흡수하지 않고 `unknown` 3번째 상태로 노출 | 기존 `isTokenExpired()` 의 "assuming not expired" 폴백을 복제하면 판독 실패가 조용한 거짓 안심이 된다. 선착순 이벤트에서는 그 침묵이 실질 피해다 | ✓ Good — `parseJwtExpMs()` 가 모든 실패 경로에서 `null` 반환, 폴백 미복제(T-07-08 CLOSED) |
+| [Phase 07] D-13: 대기 종료 직후 토큰을 재조회해 POST 에 신선한 값을 사용 | 대기 진입 시점에 캡처한 토큰을 그대로 쓰면 "경고를 보고 재로그인했는데 그 결과가 POST 에 반영되지 않는" 상태가 된다 — R022 전체가 경고만 뜨고 아무것도 구하지 못하는 기능이 되어버린다 | ✓ Good — `freshToken` 이 POST/폴링/이벤트 프리뷰 전부에 사용됨(T-07-06 CLOSED) |
+| [Phase 07] D-12: 만료 경고가 떠 있어도 신청 실행을 막지 않음 | 경고는 정보이지 차단이 아니다. 만료 판정이 틀렸을 때 사용자가 신청 자체를 못 하게 되는 것이 만료된 토큰으로 실패하는 것보다 나쁘다 | ✓ Good — UAT Test 1·4 에서 경고·버튼 잠금 중에도 신청 실행 버튼 동작 확인 |
+| [Phase 07] 05-05: `stepRef(useRef)` 도입 — 계획에 없던 스테일 클로저 결함을 Rule 1 로 자동 수정 | `onAuthEvent` 구독이 마운트 1회성 `useEffect([])` 안에 있어 `step` 이 영구히 `"login"` 으로 고정돼 있었다. 고치지 않으면 `apply-execution` 판정 경로가 한 번도 참이 되지 않아 Pitfall 3 방어가 코드상으로만 존재하게 된다 | ✓ Good — 계획 밖이지만 정확성에 직결. 이런 결함은 리뷰가 아니라 실행 중에만 드러난다 |
+| [Phase 07] G-04: WR-02 를 timeout 분기 한 줄 추가가 아닌 단일 성공 관문 수렴으로 폐쇄 | 한 줄 추가는 세 번째 성공 경로가 생기면 같은 누락이 재발한다. 관문으로 수렴하면 `{ success: true }` 를 자격증명 저장 없이 구성할 수 없다 | ✓ Good — 저장소의 기존 단일 관문 패턴(`buildFailureResult()`, `_evaluateCurrentTokenExpiry()`)과 일치 |
+| [Phase 07] CR-01 은 코드·테스트로 닫고 UAT 는 실계정 최종 확인으로만 운용 | 재로그인 성공 시 경고 해제는 07-06 이 계층 관통 회귀 테스트(실패 대조군 포함)로 봉인했다. UAT 를 결함 재확인 절차로 다시 쓰면 자동 테스트가 이미 준 신호를 사람이 반복하는 비용만 남는다 | ✓ Good — UAT Test 3 시나리오 ④ 통과로 최종 확인 |
 
 ## Known Limitations (Post-M001)
 
@@ -146,4 +155,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-27 after Phase 06*
+*Last updated: 2026-09-07 after Phase 07*

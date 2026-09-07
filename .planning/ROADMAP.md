@@ -23,7 +23,7 @@
 
 - [x] **Phase 05: API 로그인 핵심 흐름 + 토큰 교환 검증** - 이미 동작하는 헤드리스 로그인에서 계정 토큰을 확보해 account→팬이벤트 토큰 사다리(R019)가 실계정에서 성립하는지 판정하고, 반증된 3단계 OTP 로그인 계약을 문서에서 정정한다 (2026-08-25 HAR 반증 후 재설계 — 마일스톤 최대 리스크 조기 해소 스파이크) (completed 2026-08-25)
 - [x] **Phase 06: 로그인 방식 선택 UI + 실패 안내** - 사용자가 API/브라우저 로그인 방식을 선택하고 선택값이 영속되며, 선택 시 제약 고지와 한국어 실패 사유를 확인할 수 있다 (completed 2026-08-27)
-- [ ] **Phase 07: API 자격 증명 저장 + 토큰 만료 사전 경고** - API 모드 자격증명을 암호화 저장해 재입력을 생략하고, 신청 대기 중 토큰 만료가 예상되면 사전에 재로그인을 유도한다
+- [x] **Phase 07: API 자격 증명 저장 + 토큰 만료 사전 경고** - API 모드 자격증명을 암호화 저장해 재입력을 생략하고, 신청 대기 중 토큰 만료가 예상되면 사전에 재로그인을 유도한다 (completed 2026-09-07)
 
 ## Phase Details
 
@@ -178,7 +178,7 @@
 **Wave 1** *(병렬 2개 — 파일 겹침 없음)*
 
 - [x] 07-06-PLAN.md — [wave 1] **gap (CR-01, blocker)** 브라우저 모드 재로그인 완료 시점에 만료를 재판정하도록 `shouldRecheckTokenExpiry()` 판정 seam 신설 + `App.tsx onAuthEvent` 단일 재판정 지점 배선 + 계층 관통 회귀 테스트 (D-10, R022) · WR-01(재로그인 버튼 disabled/aria-busy · 반환값 검사) 동봉
-- [ ] 07-07-PLAN.md — [wave 1] **gap (WR-02/WR-03)** `credentialLogin()` 의 두 성공 분기를 단일 성공 관문 `completeCredentialLoginSuccess` 로 수렴해 timeout→쿠키 경로의 저장 누락 폐쇄 + `handleCredentialLogin()` finally 스냅샷 재조회로 낡은 4상태 안내 해소 (D-01/D-04/D-05, R023)
+- [x] 07-07-PLAN.md — [wave 1] **gap (WR-02/WR-03)** `credentialLogin()` 의 두 성공 분기를 단일 성공 관문 `completeCredentialLoginSuccess` 로 수렴해 timeout→쿠키 경로의 저장 누락 폐쇄 + `handleCredentialLogin()` finally 스냅샷 재조회로 낡은 4상태 안내 해소 (D-01/D-04/D-05, R023)
 
 ## Progress
 
@@ -193,4 +193,4 @@ Phases execute in numeric order: 05 → 06 → 07
 | 04. s04 | M001-ksbtje | - | Complete | 2026-05-13 |
 | 05. API 로그인 핵심 흐름 + 토큰 교환 검증 | v0.3.0 | 3/3 | Complete    | 2026-08-25 |
 | 06. 로그인 방식 선택 UI + 실패 안내 | v0.3.0 | 10/10 | Complete    | 2026-08-27 |
-| 07. API 자격 증명 저장 + 토큰 만료 사전 경고 | v0.3.0 | 7/7 | In Progress|  |
+| 07. API 자격 증명 저장 + 토큰 만료 사전 경고 | v0.3.0 | 7/7 | Complete    | 2026-09-07 |

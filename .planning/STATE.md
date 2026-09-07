@@ -3,36 +3,37 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: 로그인 방식 선택 (API / 브라우저)
 current_phase: 07
-current_phase_name: API 자격 증명 저장 + 토큰 만료 사전 경고
-status: executing
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-08-28T08:48:14.829Z"
-last_activity: 2026-08-28
-last_activity_desc: Phase 07 execution started
-state_head: 04ed66797fcca20eaf305ffd96e85e021b9f4204
+status: completed
+stopped_at: Phase 07 complete — all phases complete
+last_updated: "2026-09-07T03:28:53.529Z"
+last_activity: 2026-09-07
+last_activity_desc: Phase 07 complete
+state_head: bee8518bd8ea4ae0e1a483abd686b7908663d1fc
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 20
   completed_plans: 20
-  percent: 67
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-27)
+See: .planning/PROJECT.md (updated 2026-09-07)
 
 **Core value:** 서버 시간 보정 + RTT 반영으로 선착순 이벤트 신청 POST가 정시에 서버에 도착하는 것.
-**Current focus:** Phase 07 — API 자격 증명 저장 + 토큰 만료 사전 경고
+**Current focus:** v0.3.0 마일스톤 종료 처리 — `/gsd-complete-milestone`
 
 ## Current Position
 
-Phase: 07 (API 자격 증명 저장 + 토큰 만료 사전 경고) — EXECUTING
-Plan: 3 of 7
-Status: Ready to execute
-Last activity: 2026-08-28 — Phase 07 execution started
+Phase: 07
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-09-07 — Phase 07 complete
+
+**Phase 07 결과 (완료 2026-09-07):** 7개 플랜(트레이서 + 웨이브 4단계 5개 + gap closure 2개) 전부 실행. R022/R023 validated. UAT 6/6 통과(전부 사람 확인 — `.tsx` 렌더링·실계정 타이밍 의존으로 vitest 대상 밖). `07-SECURITY.md` 위협 30건 전부 CLOSED(`threats_open: 0`, accept 6건은 R-07-01~06 으로 기록). 테스트 474개 green, typecheck 2종 green, 신규 의존성 0건. Phase 06 이월 2건(WR-04 설정 IPC 런타임 검증 · IN-01 설정 읽기 오류 로그 문구)은 07-03 에서 폐쇄. `07-VERIFICATION.md` 의 CR-01(재로그인 성공 시 경고 미해제, blocker)은 07-06 이 `shouldRecheckTokenExpiry()` 판정 seam + 실패 대조군 회귀 테스트로 닫았고, WR-02(timeout→쿠키 경로 저장 누락)/WR-03(낡은 4상태 안내)은 07-07 이 단일 성공 관문 수렴 + `finally` 스냅샷 재조회로 닫았다.
 
 **Phase 06 결과 (완료 2026-08-27):** 10개 플랜 + 3개 gap closure 플랜 전부 실행. R016/R020/R021 validated. UAT 48/48 통과(자동 커버 39 + 사람 확인 9), `06-SECURITY.md` 위협 44건 전부 CLOSED(`threats_open: 0`, accept 2건은 AR-01/AR-02 로 기록). 테스트 354개 green, typecheck 2종 + build green, 신규 의존성 0건. `06-REVIEW.md` 10개 발견 전부 처리 — WR-04/IN-01 은 Phase 07 로 이월, IN-04(모달 `max-height`)는 UAT Test 2 실행 확인으로 해소.
 
@@ -46,13 +47,13 @@ Last activity: 2026-08-28 — Phase 07 execution started
 구 05-01(halted)/05-02(blocked) 플랜은 폐기·대체됐다. 정본 근거: `.planning/phases/05-api/05-01-SUMMARY.md`,
 결정 사항: `.planning/phases/05-api/05-CONTEXT.md`
 
-Progress: [████████████████████] 13/13 plans ([███████░░░] 67%) · 페이즈 2/3 완료 (67%) — Phase 07 미계획
+Progress: [████████████████████] 20/20 plans ([██████████] 100%) · 페이즈 3/3 완료 (100%) — v0.3.0 전체 phase 완료, 마일스톤 종료 처리 대기
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 13 (v0.3.0 기준)
+- Total plans completed: 20 (v0.3.0 기준)
 - Average duration: —
 - Total execution time: —
 
@@ -64,6 +65,7 @@ Progress: [████████████████████] 13/13 p
 | 05-07 (v0.3.0) | 0 | 0 | — |
 | 05 | 3 | - | - |
 | 06 | 10 | - | - |
+| 07 | 7 | - | - |
 
 **Recent Trend:**
 
@@ -163,10 +165,14 @@ None yet.
 - ⚠️ [Phase 05] **ApplyEngine 의 사다리 토큰 수용이 행동 수준으로 미검증** — shape 수준 근거로 사인오프했다. D-04(로그인 방식 최종 결정)가 이 전제 위에 놓인다.
 - ⚠️ [Phase 05] **운영 조치 미완:** 실계정 관측 당시 기록된 실토큰이 `~/Library/Application Support/weverse-fanevent-apply/logs/2026-08-25.log` 에 평문으로 남아 있다. T-05-17 수정은 소급 적용되지 않으므로 사용자가 직접 정리해야 한다.
 
-- [Phase 06] **리뷰 이월 2건 → Phase 07:** WR-04(설정 IPC 런타임 검증)와 IN-01(설정 읽기 오류 로그 문구). 근거는 각 PLAN 의 `<review_disposition>`.
 - [Phase 06] **문서 결함:** `06-VALIDATION.md` / `06-07-PLAN.md` 의 수동 검증 지시문이 존재하지 않는 `npm run dev` 를 가리킨다(실제 명령 `npm start`). UAT Test 9 에서 발견, 사용자 판단으로 pass 처리하고 문구 정정은 후속 작업으로 남겼다.
 
+- ⚠️ [Phase 07] **UAT 6항목 전부가 사람 확인 전용** — `.tsx` 렌더러 컴포넌트가 `vitest.config.ts` 의 include(`.test.ts` 만)에 잡히지 않아 렌더링 경로에 자동 회귀망이 없다. include 확장 + 렌더링 테스트 도입은 별도 항목.
+- ⚠️ [Phase 07] **T-07-13 인수:** `saveCredentials()` 가 원자적 쓰기(tmp+rename)를 쓰지 않는다. 부분 쓰기는 손상 감지→삭제→재입력 경로로 수렴하지만, 원자적 쓰기 도입은 미해결 항목으로 남는다 (R-07-03).
+- ⚠️ [Phase 07] **UAT Test 5 는 정상 경로 확인일 가능성** — timeout→쿠키 느린 경로는 재현이 어려워, 통과가 그 경로 자체의 실증인지 정상 경로 확인인지 구분되지 않는다. 07-07 의 코드·테스트 수준 봉인이 1차 근거다.
+
 *해소됨:* ~~R019 (account → we2_access_token 교환) 미검증~~ — 2026-08-25 실계정 1회 관측으로 rung1 성립 확인 (부분 해소, rung2 는 위에 잔존).
+*해소됨:* ~~[Phase 06] 리뷰 이월 2건(WR-04/IN-01) → Phase 07~~ — 07-03 에서 폐쇄. `SettingsStore.setLoginMode()` 가 저장 진입점에서 값 검증 후 위반 시 throw(T-07-05 CLOSED).
 
 ## Deferred Items
 
@@ -177,5 +183,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-08-28T08:48:14.700Z
-Stopped at: Completed 07-07-PLAN.md
+Stopped at: Phase 07 complete — all phases complete
 Resume file: None
