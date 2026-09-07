@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { maskToken, maskPhone, maskBirthDate, maskMembershipNumber, maskName, maskEmail, maskSensitive } from "../mask";
+import { maskToken, maskPhone, maskBirthDate, maskMembershipNumber, maskName, maskEmail, maskSensitive, stripUrlQuery } from "../mask";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -448,5 +448,38 @@ describe("isTokenExpired", () => {
   it("exp exactly at current second boundary — treats as expired", () => {
     const nowSec = Math.floor(Date.now() / 1000) - 1;
     expect(isTokenExpired(makeJwt({ exp: nowSec }))).toBe(true);
+  });
+});
+
+describe("stripUrlQuery", () => {
+  it("드롭한다: 로그인 리다이렉트의 토큰 쿼리 전체", () => {
+    const url =
+      "https://weverse.io/loginResult?topath=%2F&access_token=eyJhbGciOiJIUzI1NiJ9.aaa.bbb&refresh_token=eyJhbGciOiJIUzI1NiJ9.ccc.ddd&service_user_id=12345";
+    const out = stripUrlQuery(url);
+    expect(out).toBe("https://weverse.io/loginResult");
+    expect(out).not.toContain("access_token");
+    expect(out).not.toContain("refresh_token");
+    expect(out).not.toContain("service_user_id");
+    expect(out).not.toContain("eyJ");
+  });
+
+  it("경로는 보존한다 — 어느 화면으로 갔는지는 진단에 필요하다", () => {
+    expect(stripUrlQuery("https://account.weverse.io/ko/login/credential?client_id=weverse&v=4")).toBe(
+      "https://account.weverse.io/ko/login/credential",
+    );
+  });
+
+  it("쿼리가 없으면 그대로 둔다", () => {
+    expect(stripUrlQuery("https://weverse.io/")).toBe("https://weverse.io/");
+  });
+
+  it("프래그먼트도 자른다", () => {
+    expect(stripUrlQuery("https://weverse.io/x#access_token=abc")).toBe("https://weverse.io/x");
+  });
+
+  it("빈 값과 파싱 불가 입력에도 throw 하지 않는다", () => {
+    expect(stripUrlQuery("")).toBe("");
+    expect(stripUrlQuery("not a url?token=secret")).toBe("not a url");
+    expect(stripUrlQuery("garbage")).toBe("garbage");
   });
 });

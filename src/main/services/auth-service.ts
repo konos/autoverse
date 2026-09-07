@@ -2,7 +2,7 @@ import { EventEmitter } from "events";
 import { BrowserWindow, session, safeStorage, app } from "electron";
 import * as fs from "fs";
 import * as path from "path";
-import { maskToken, maskSensitive, maskEmail } from "../../shared/mask";
+import { maskToken, maskSensitive, maskEmail, stripUrlQuery } from "../../shared/mask";
 import type {
   AuthStatus,
   AuthEvent,
@@ -33,6 +33,14 @@ const BY_CREDENTIALS_PATH = "/v4/auth/token/by-credentials";
 const FANS_ME_URL =
   "https://fanevent-v2.weverse.io/api/fan-api/v1/fans/me";
 const VALIDATE_TIMEOUT_MS = 5_000;
+
+/**
+ * 로그아웃/재로그인 시 비워야 하는 Weverse 세션 쿠키 이름.
+ *
+ * `we2_access_token` 만 지우면 `we2_refresh_token` 으로 세션이 즉시 되살아난다.
+ * 광고/트래킹 쿠키는 세션과 무관하므로 건드리지 않는다.
+ */
+const SESSION_COOKIE_NAMES = ["we2_access_token", "we2_refresh_token"] as const;
 
 const LOGIN_URL =
   "https://account.weverse.io/ko/login/credential?client_id=weverse&v=4";
@@ -269,21 +277,41 @@ export class AuthService extends EventEmitter {
 
   // ── Logout ──────────────────────────────────────────────────────────────
 
+  /**
+   * Weverse 세션 쿠키 단일 삭제 관문.
+   *
+   * 이전에는 logout()/login()/credentialLogin() 세 곳이 각자 같은 루프를
+   * 복제해 두고 `we2_access_token` 하나만 지웠다. 주석은 셋 다 "세션 쿠키를
+   * 비운다"고 적혀 있었지만 실제로는 `we2_refresh_token` 이 살아남아,
+   * 로그아웃 후 브라우저 로그인을 눌러도 weverse.io 가 로그인 페이지로
+   * 리다이렉트하지 않고 로그인된 홈을 그대로 보여줬다 — 사용자에게는
+   * "창은 뜨는데 로그인 화면이 안 나온다"로 보인다.
+   *
+   * 삭제 대상을 이 상수 하나로 고정해, 네 번째 호출부가 생겨도 같은 누락이
+   * 재발하지 않게 한다.
+   */
+  private async clearSessionCookies(ses: Electron.Session): Promise<void> {
+    for (const name of SESSION_COOKIE_NAMES) {
+      try {
+        const cookies = await ses.cookies.get({ name });
+        for (const c of cookies) {
+          const scheme = c.secure ? "https" : "http";
+          const domain = c.domain?.startsWith(".") ? c.domain.slice(1) : c.domain;
+          await ses.cookies.remove(`${scheme}://${domain}${c.path ?? "/"}`, c.name).catch(() => {});
+        }
+      } catch {
+        /* 이 쿠키가 없으면 지울 것도 없다 — 다음 이름으로 넘어간다 */
+      }
+    }
+  }
+
   async logout(clearCredentials = false): Promise<void> {
     this.cachedToken = null;
     this.cachedFanId = undefined;
     this.cleanupHeadless();
 
     // Clear cookies from the weverse session partition
-    const ses = session.fromPartition("persist:weverse");
-    try {
-      const cookies = await ses.cookies.get({ name: "we2_access_token" });
-      for (const c of cookies) {
-        const scheme = c.secure ? "https" : "http";
-        const domain = c.domain?.startsWith(".") ? c.domain.slice(1) : c.domain;
-        await ses.cookies.remove(`${scheme}://${domain}${c.path ?? "/"}`, c.name).catch(() => {});
-      }
-    } catch { /* ok */ }
+    await this.clearSessionCookies(session.fromPartition("persist:weverse"));
 
     if (clearCredentials) {
       this.clearCredentials();
@@ -312,13 +340,13 @@ export class AuthService extends EventEmitter {
     // 계속 허용한다 — 재시작 후 바로 사용할 수 있는 경험을 지킨다.
     const tokenFound = await this.extractTokenFromCookies();
     if (tokenFound) {
-      logService.info("AuthService", "tryAutoLogin: existing cookie token found — session restored");
+      logService.info("AuthService", "기존 세션이 유효합니다 — 로그인 상태를 복원했습니다");
       return true;
     }
 
     logService.info(
       "AuthService",
-      "tryAutoLogin: no valid session cookie — 저장된 자격증명이 있어도 무인 로그인은 시도하지 않는다. 사용자가 직접 로그인해야 합니다",
+      "자동 로그인 건너뜀 — 유효한 세션이 없습니다. 저장된 자격증명이 있어도 무인 로그인은 시도하지 않습니다(사용자 확인 필요).",
     );
     return false;
   }
@@ -339,12 +367,12 @@ export class AuthService extends EventEmitter {
     try {
       const tokenFound = await this.extractTokenFromCookies();
       if (tokenFound) {
-        logService.info("AuthService", "trySessionRestore: existing cookie token found — session restored");
+        logService.info("AuthService", "기존 세션이 유효합니다 — 로그인 상태를 복원했습니다");
         return true;
       }
       logService.info(
         "AuthService",
-        "trySessionRestore: no valid session cookie — 사용자가 직접 로그인해야 합니다",
+        "세션 복원 실패 — 유효한 세션이 없습니다. 직접 로그인이 필요합니다.",
       );
       return false;
     } finally {
@@ -371,7 +399,7 @@ export class AuthService extends EventEmitter {
     }
     this.credentialLoginInFlight = true;
     try {
-    logService.info("AuthService", "credentialLogin(headless): starting");
+    logService.info("AuthService", "API 로그인: 자격증명 인증 시작");
     this._emit({ type: "credential-login-progress", message: "로그인 시도 중...", timestamp: Date.now() });
 
     this.cleanupHeadless();
@@ -385,15 +413,7 @@ export class AuthService extends EventEmitter {
     // Authorization: Bearer 헤더로 인증한다(weverse-api.ts:13-18 commonHeaders()).
     const previousToken = this.cachedToken;
 
-    const ses = session.fromPartition("persist:weverse");
-    try {
-      const old = await ses.cookies.get({ name: "we2_access_token" });
-      for (const c of old) {
-        const scheme = c.secure ? "https" : "http";
-        const domain = c.domain?.startsWith(".") ? c.domain.slice(1) : c.domain;
-        await ses.cookies.remove(`${scheme}://${domain}${c.path ?? "/"}`, c.name).catch(() => {});
-      }
-    } catch { /* ok */ }
+    await this.clearSessionCookies(session.fromPartition("persist:weverse"));
 
     const win = new BrowserWindow({
       width: 500,
@@ -410,7 +430,7 @@ export class AuthService extends EventEmitter {
 
     try {
       await win.loadURL(LOGIN_URL);
-      logService.info("AuthService", "credentialLogin(headless): login page loaded");
+      logService.diag("AuthService", "credentialLogin: auth page loaded");
 
       // Wait for the email input to appear
       await win.webContents.executeJavaScript(`
@@ -465,7 +485,7 @@ export class AuthService extends EventEmitter {
           };
         })();
       `) as { emailLen: number; pwLen: number };
-      logService.info("AuthService", `credentialLogin(headless): input state — emailLen=${inputState.emailLen} chars, pwLen=${inputState.pwLen} chars`);
+      logService.diag("AuthService", `credentialLogin: input state — emailLen=${inputState.emailLen} chars, pwLen=${inputState.pwLen} chars`);
 
       // Wait for React state to update — poll until login button is enabled
       const btnEnabled = await win.webContents.executeJavaScript(`
@@ -484,7 +504,7 @@ export class AuthService extends EventEmitter {
       `) as boolean;
 
       if (!btnEnabled) {
-        logService.warn("AuthService", "credentialLogin(headless): login button still disabled after input, dumping page state");
+        logService.diag("AuthService", "credentialLogin: submit still disabled after input, dumping page state");
         const debugInfo = await win.webContents.executeJavaScript(`
           (function() {
             const emailInput = document.querySelector('input[placeholder="your@email.com"]');
@@ -500,7 +520,7 @@ export class AuthService extends EventEmitter {
             };
           })();
         `).catch(() => ({}));
-        logService.info("AuthService", `credentialLogin(headless): debug=${JSON.stringify(debugInfo)}`);
+        logService.diag("AuthService", `credentialLogin: debug=${JSON.stringify(debugInfo)}`);
         // WR-03 (06-REVIEW.md) — 이 분기는 classifyCredentialLoginSignal()/
         // mapLoginFailure() 를 거치지 않는 DOM 신호가 아니므로 overrideReason
         // "unknown" + overrideMessage 로 buildFailureResult() 관문에 태운다.
@@ -527,7 +547,7 @@ export class AuthService extends EventEmitter {
         })();
       `);
 
-      logService.info("AuthService", "credentialLogin(headless): login button clicked, waiting for response");
+      logService.info("AuthService", "API 로그인: 자격증명 제출 — 응답 대기 중");
 
       // Wait for OTP input, redirect, token cookie, or error
       const result = await new Promise<string>((resolve) => {
@@ -575,7 +595,7 @@ export class AuthService extends EventEmitter {
 
         // Also listen for navigation events
         const onNav = async (_e: Electron.Event, url: string) => {
-          logService.info("AuthService", `credentialLogin(headless): navigated to ${url}`);
+          logService.diag("AuthService", `credentialLogin: navigated to ${stripUrlQuery(url)}`);
           if (!url.includes("account.weverse.io/ko/login")) {
             await new Promise(r => setTimeout(r, 1500));
             const tokenFound = await this.extractTokenFromCookies();
@@ -586,10 +606,10 @@ export class AuthService extends EventEmitter {
         win.webContents.on("did-navigate-in-page", onNav);
       });
 
-      logService.info("AuthService", `credentialLogin(headless): result=${result}`);
+      logService.diag("AuthService", `credentialLogin: result=${result}`);
 
       if (result === "token") {
-        logService.info("AuthService", "credentialLogin(headless): token obtained directly");
+        logService.info("AuthService", "API 로그인: 액세스 토큰 확보");
         // D-12 사다리 실패 행: 로그인은 성공했지만 서비스 토큰 확보에 실패하면
         // 사용자에게도 그 사실이 도달해야 한다 — 로그에만 남기고 끝내지 않는다.
         void this.runAccountTokenLadderSpike("credentialLogin")
@@ -621,7 +641,7 @@ export class AuthService extends EventEmitter {
             return { url: location.href, title: document.title, bodyLen: document.body?.innerHTML?.length ?? 0 };
           })();
         `).catch(() => ({}));
-        logService.error("AuthService", `credentialLogin(headless): timeout, debug=${JSON.stringify(debugInfo)}`);
+        logService.diag("AuthService", `credentialLogin: timeout, debug=${JSON.stringify(debugInfo)}`);
       }
 
       // D-13: 캡차/OTP폼/폼오류/타임아웃/미지 신호 전부를 classifyCredentialLoginSignal()
@@ -630,7 +650,7 @@ export class AuthService extends EventEmitter {
       const failureResult = this.buildFailureResult(result);
       logService.info(
         "AuthService",
-        `credentialLogin(headless): classified reason=${failureResult.reason} raw=${result}`,
+        `API 로그인 실패: ${failureResult.reason}`,
       );
       this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
       this.cleanupHeadless();
@@ -639,7 +659,7 @@ export class AuthService extends EventEmitter {
     } catch (err) {
       const rawDetail = err instanceof Error ? err.message : String(err);
       const failureResult = this.buildFailureResult(null, "network-error", rawDetail);
-      logService.error("AuthService", `credentialLogin(headless) exception: ${rawDetail}`);
+      logService.error("AuthService", `API 로그인 오류: ${rawDetail}`);
       this._emit({ type: "login-failed", message: failureResult.message ?? "로그인 실패", timestamp: Date.now() });
       this.cleanupHeadless();
       this.restoreTokenIfLost(previousToken);
@@ -712,7 +732,7 @@ export class AuthService extends EventEmitter {
     // 잘리지 않은 원문은 logService 로 보낸다 — 그쪽 자동 마스킹이 적용되므로
     // 여기서 다시 마스킹하지 않는다.
     if (guidance.logDetail) {
-      logService.info("AuthService", `credentialLogin(headless): form error detail=${guidance.logDetail}`);
+      logService.diag("AuthService", `credentialLogin: form error detail=${guidance.logDetail}`);
     }
 
     // R010 마스킹 관문 — message/identifier 는 렌더러로 직접 반환되는 값이라
@@ -752,7 +772,7 @@ export class AuthService extends EventEmitter {
     for (const c of cookies) {
       if (c.value && !this.isTokenExpired(c.value)) {
         this.cachedToken = c.value;
-        logService.info("AuthService", `extractTokenFromCookies: token len=${c.value.length}`);
+        logService.diag("AuthService", `extractTokenFromCookies: token len=${c.value.length}`);
         this._emit({ type: "login-success", message: `토큰 추출 성공: ${maskToken(c.value)}`, timestamp: Date.now() });
         this.validateToken().catch((err) => {
           logService.error("AuthService", `post-credential-login validateToken failed: ${String(err)}`);
@@ -784,7 +804,7 @@ export class AuthService extends EventEmitter {
       this.cachedToken = previousToken;
       logService.warn(
         "AuthService",
-        `credentialLogin(headless): 재로그인 실패 — 이전 토큰 복원 ${maskToken(previousToken)}`,
+        `API 로그인: 재로그인 실패 — 이전 토큰 복원 ${maskToken(previousToken)}`,
       );
     }
   }
@@ -817,17 +837,17 @@ export class AuthService extends EventEmitter {
     try {
       dbg.attach("1.3");
     } catch (err) {
-      logService.warn(
+      logService.diag(
         "AuthService",
-        `accountTokenCapture(CDP): attach failed=${err instanceof Error ? err.message : String(err)}`,
+        `accountTokenCapture: attach failed=${err instanceof Error ? err.message : String(err)}`,
       );
       return;
     }
-    logService.info("AuthService", "accountTokenCapture(CDP): attach ok");
+    logService.diag("AuthService", "accountTokenCapture: attach ok");
 
     dbg.on("detach", (_event, reason) => {
       detachReason = reason;
-      logService.warn("AuthService", `accountTokenCapture(CDP): detached reason=${reason}`);
+      logService.diag("AuthService", `accountTokenCapture: detached reason=${reason}`);
     });
 
     dbg.on("message", (_event, method, params) => {
@@ -836,9 +856,9 @@ export class AuthService extends EventEmitter {
         if (url && url.includes(BY_CREDENTIALS_PATH)) {
           pendingRequestId = params?.requestId as string;
           sawResponse = true;
-          logService.info(
+          logService.diag(
             "AuthService",
-            `accountTokenCapture(CDP): responseSeen requestId=${pendingRequestId} status=${params?.response?.status}`,
+            `accountTokenCapture: responseSeen requestId=${pendingRequestId} status=${params?.response?.status}`,
           );
         }
         return;
@@ -856,25 +876,25 @@ export class AuthService extends EventEmitter {
             const token = extractAccessTokenFromResponseBody(rawBody);
             if (token) {
               capturedAccessToken = token;
-              logService.info(
+              logService.diag(
                 "AuthService",
-                `accountTokenCapture(CDP): accessToken captured ${describeTokenShape(token)}`,
+                `accountTokenCapture: accessToken captured ${describeTokenShape(token)}`,
               );
             }
           })
           .catch((err: unknown) => {
-            logService.error(
+            logService.diag(
               "AuthService",
-              `accountTokenCapture(CDP): getResponseBody failed: ${err instanceof Error ? err.message : String(err)}`,
+              `accountTokenCapture: getResponseBody failed: ${err instanceof Error ? err.message : String(err)}`,
             );
           });
       }
     });
 
     dbg.sendCommand("Network.enable").catch((err: unknown) => {
-      logService.warn(
+      logService.diag(
         "AuthService",
-        `accountTokenCapture(CDP): Network.enable failed: ${err instanceof Error ? err.message : String(err)}`,
+        `accountTokenCapture: Network.enable failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     });
   }
@@ -918,25 +938,33 @@ export class AuthService extends EventEmitter {
     try {
       const ses = session.fromPartition("persist:weverse");
       const cookies = (await ses.cookies.get({})) as CookieLike[];
-      logService.info(
+      logService.diag(
         "AuthService",
-        `accountTokenDiscovery: partition=persist:weverse cookies=${cookies.length}`,
+        `accountTokenDiscovery: candidates=${cookies.length}`,
       );
-      logService.info("AuthService", `accountTokenDiscovery: ${summarizeCookies(cookies)}`);
+      // 인벤토리는 weverse 도메인으로 좁힌다 — persist:weverse 파티션에는
+      // 로그인 페이지가 끌어온 서드파티 추적 쿠키(google/youtube/광고망 등)가
+      // 수십 개 섞여 있고, 그 목록은 토큰 후보 진단에 아무 값도 주지 않으면서
+      // 사용자의 브라우징 흔적을 로그 파일에 남긴다.
+      const weverseCookies = cookies.filter((c) => (c.domain ?? "").includes("weverse.io"));
+      logService.diag(
+        "AuthService",
+        `accountTokenDiscovery: ${summarizeCookies(weverseCookies)}`,
+      );
 
       const candidate = pickAccountTokenCookie(cookies);
       let token: string | null = null;
       let tokenSource: AccountTokenLadderSpikeResult["tokenSource"] = "none";
 
       if (candidate) {
-        logService.info(
+        logService.diag(
           "AuthService",
           `accountTokenDiscovery: candidate=${candidate.name}@${candidate.domain ?? "?"} len=${candidate.value.length}`,
         );
         token = candidate.value;
         tokenSource = "cookie";
       } else {
-        logService.info("AuthService", "accountTokenDiscovery: candidate=none");
+        logService.diag("AuthService", "accountTokenDiscovery: candidate=none");
         const cdpToken = this.accountTokenCapture?.getCapturedAccessToken() ?? null;
         if (cdpToken) {
           token = cdpToken;
@@ -946,7 +974,7 @@ export class AuthService extends EventEmitter {
 
       if (!token) {
         const reason = `no account token — cookieCandidate=none cdpSawResponse=${this.accountTokenCapture?.sawResponse ?? false} cdpDetach=${this.accountTokenCapture?.detachReason ?? "none"}`;
-        logService.info("AuthService", `accountTokenLadderSpike: ${reason}`);
+        logService.diag("AuthService", `accountTokenLadderSpike: ${reason}`);
         return logVerdict({
           verdict: "fail",
           tokenSource: "none",
@@ -956,7 +984,7 @@ export class AuthService extends EventEmitter {
         });
       }
 
-      logService.info(
+      logService.diag(
         "AuthService",
         `accountTokenLadderSpike: tokenSource=${tokenSource} ${describeTokenShape(token)} matchesWe2Cookie=${token === this.cachedToken}`,
       );
@@ -1007,17 +1035,55 @@ export class AuthService extends EventEmitter {
     const win = this.loginWindow;
     let tokenExtracted = false;
 
-    // Flush all cookies from the weverse partition so the user actually
-    // goes through the login flow instead of re-extracting an expired token.
-    const session = win.webContents.session;
-    try {
-      const allCookies = await session.cookies.get({ name: "we2_access_token" });
-      for (const c of allCookies) {
-        const scheme = c.secure ? "https" : "http";
-        const domain = c.domain?.startsWith(".") ? c.domain.slice(1) : c.domain;
-        await session.cookies.remove(`${scheme}://${domain}${c.path ?? "/"}`, c.name).catch(() => {});
+    logService.info("AuthService", "브라우저 로그인: 로그인 창 열기");
+
+    // 로드 실패를 조용히 삼키지 않는다 — 이전에는 loadURL 이 실패해도 로그가
+    // 한 줄도 남지 않아 "창은 떴는데 아무것도 안 나온다"는 상태에서 원인을
+    // 가릴 방법이 없었다. did-fail-load 는 하위 프레임(광고/트래커)에서도
+    // 뜨므로 메인 프레임만 사용자에게 알린다.
+    win.webContents.on("did-fail-load", (_e, errorCode, errorDesc, failingUrl, isMainFrame) => {
+      if (!isMainFrame) {
+        logService.diag(
+          "AuthService",
+          `browserLogin: subframe load failed code=${errorCode} desc=${errorDesc} url=${stripUrlQuery(failingUrl)}`,
+        );
+        return;
       }
-    } catch { /* no cookies to clear */ }
+      // -3 (ERR_ABORTED) 는 리다이렉트/사용자 이탈로도 발생하는 정상 신호다.
+      if (errorCode === -3) {
+        logService.diag("AuthService", `browserLogin: main frame aborted url=${stripUrlQuery(failingUrl)}`);
+        return;
+      }
+      logService.error(
+        "AuthService",
+        `브라우저 로그인: 페이지를 불러오지 못했습니다 (${errorDesc}, code=${errorCode})`,
+      );
+      this._emit({
+        type: "login-failed",
+        message: `로그인 페이지를 불러오지 못했습니다: ${errorDesc}`,
+        timestamp: Date.now(),
+      });
+    });
+
+    win.webContents.on("did-finish-load", () => {
+      logService.diag("AuthService", "browserLogin: page finished loading");
+    });
+
+    win.webContents.on("render-process-gone", (_e, details) => {
+      logService.error(
+        "AuthService",
+        `브라우저 로그인: 로그인 창이 응답하지 않습니다 (${details.reason})`,
+      );
+      this._emit({
+        type: "login-failed",
+        message: "로그인 창이 응답하지 않습니다. 다시 시도해주세요.",
+        timestamp: Date.now(),
+      });
+    });
+
+    // 세션 쿠키를 비워 사용자가 실제 로그인 흐름을 타게 한다 — 리프레시
+    // 토큰이 남아 있으면 weverse.io 가 로그인된 홈을 그대로 띄운다.
+    await this.clearSessionCookies(win.webContents.session);
 
     const pollForToken = async () => {
       if (tokenExtracted || win.isDestroyed()) return;
@@ -1104,7 +1170,22 @@ export class AuthService extends EventEmitter {
 
     // Start on weverse.io — it will redirect to account.weverse.io for login,
     // then back to weverse.io after login completes, setting we2_access_token
-    await win.loadURL("https://weverse.io");
+    //
+    // loadURL 은 실패 시 reject 한다. 이전에는 그 예외가 IPC 핸들러를 거쳐
+    // 렌더러까지 올라가 버튼의 catch 로만 잡혔고, 메인 로그에는 아무것도
+    // 남지 않았다 — 창은 열린 채로 비어 있고 원인은 알 수 없는 상태가 된다.
+    try {
+      await win.loadURL("https://weverse.io");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      logService.error("AuthService", `브라우저 로그인: 페이지 로드 실패 — ${detail}`);
+      this._emit({
+        type: "login-failed",
+        message: "로그인 페이지를 불러오지 못했습니다. 네트워크 상태를 확인해주세요.",
+        timestamp: Date.now(),
+      });
+      throw err;
+    }
   }
 
   /**

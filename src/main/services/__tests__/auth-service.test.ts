@@ -10,10 +10,12 @@ import * as path from "path";
 // `vi.hoisted()` is required because `vi.mock()` factories are hoisted above
 // all imports — referencing an ordinary outer `let` here would throw
 // "Cannot access before initialization".
-const { cookieFixtureBox } = vi.hoisted(() => ({
+const { cookieFixtureBox, removedCookiesBox } = vi.hoisted(() => ({
   cookieFixtureBox: {
     current: [] as Array<{ name: string; domain?: string; value: string; httpOnly?: boolean }>,
   },
+  // clearSessionCookies() 가 실제로 어떤 쿠키를 지웠는지 기록한다.
+  removedCookiesBox: { current: [] as string[] },
 }));
 
 // ── Electron mock — must be declared before the module import ─────────────────
@@ -33,6 +35,10 @@ vi.mock("electron", () => ({
             return cookieFixtureBox.current.filter((c) => c.name === filter.name);
           }
           return cookieFixtureBox.current;
+        }),
+        remove: vi.fn(async (_url: string, name: string) => {
+          removedCookiesBox.current.push(name);
+          cookieFixtureBox.current = cookieFixtureBox.current.filter((c) => c.name !== name);
         }),
       },
     })),
@@ -1206,5 +1212,57 @@ describe("AuthService.validateToken — 실패 emit 관문 (Task 2, CR-02/06-VER
       (call) => typeof call[1] === "string" && call[1].includes(CONTEXT_FREE_TOKEN_LIKE),
     );
     expect(diagnosticCall).toBeDefined();
+  });
+});
+
+// ── 세션 쿠키 단일 삭제 관문 (브라우저 모드 로그인 화면 미표시 회귀) ────────────
+//
+// 회귀 배경: logout()/login()/credentialLogin() 세 곳이 같은 삭제 루프를 복제해
+// 두고 `we2_access_token` 하나만 지웠다. `we2_refresh_token` 이 살아남아
+// weverse.io 가 로그인 페이지 대신 로그인된 홈을 띄웠고, 사용자에게는 "창은
+// 뜨는데 로그인 화면이 안 나온다"로 보였다.
+describe("세션 쿠키 삭제 — logout()", () => {
+  beforeEach(() => {
+    removedCookiesBox.current = [];
+  });
+
+  it("리프레시 토큰까지 지운다 — 액세스 토큰만 지우면 세션이 즉시 되살아난다", async () => {
+    cookieFixtureBox.current = [
+      { name: "we2_access_token", domain: ".weverse.io", value: "a".repeat(427) },
+      { name: "we2_refresh_token", domain: ".weverse.io", value: "r".repeat(451) },
+    ];
+
+    const svc = new AuthService(new ApiAuthClient());
+    await svc.logout(false);
+
+    expect(removedCookiesBox.current).toContain("we2_access_token");
+    expect(removedCookiesBox.current).toContain("we2_refresh_token");
+    expect(cookieFixtureBox.current.map((c) => c.name)).toEqual([]);
+  });
+
+  it("추적/광고 쿠키는 건드리지 않는다 — 세션과 무관하다", async () => {
+    cookieFixtureBox.current = [
+      { name: "we2_access_token", domain: ".weverse.io", value: "a".repeat(427) },
+      { name: "we2_refresh_token", domain: ".weverse.io", value: "r".repeat(451) },
+      { name: "__gads", domain: ".weverse.io", value: "x".repeat(83) },
+      { name: "we2_device_id", domain: ".weverse.io", value: "d".repeat(36) },
+    ];
+
+    const svc = new AuthService(new ApiAuthClient());
+    await svc.logout(false);
+
+    expect(removedCookiesBox.current).not.toContain("__gads");
+    expect(removedCookiesBox.current).not.toContain("we2_device_id");
+    expect(cookieFixtureBox.current.map((c) => c.name).sort()).toEqual(["__gads", "we2_device_id"]);
+  });
+
+  it("리프레시 토큰이 없어도 throw 하지 않는다", async () => {
+    cookieFixtureBox.current = [
+      { name: "we2_access_token", domain: ".weverse.io", value: "a".repeat(427) },
+    ];
+
+    const svc = new AuthService(new ApiAuthClient());
+    await expect(svc.logout(false)).resolves.toBeUndefined();
+    expect(removedCookiesBox.current).toEqual(["we2_access_token"]);
   });
 });

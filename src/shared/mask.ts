@@ -53,6 +53,29 @@ export function maskEmail(email: string): string {
   return `${maskedLocal}@${domain}`;
 }
 
+/**
+ * URL 에서 쿼리스트링과 프래그먼트를 통째로 잘라낸다 — 경로까지만 남긴다.
+ *
+ * 로그인 리다이렉트(`/loginResult?topath=/&access_token=…&refresh_token=…`)처럼
+ * 자격증명이 쿼리 파라미터로 실려 오는 URL 이 있다. `SENSITIVE_PATTERNS` 의
+ * snake_case 쿼리 규칙이 이를 마스킹하지만, 마스킹된 조각(앞 20자 + 뒤 20자)조차
+ * 로그에 남길 이유가 없는 경로다. 어느 화면으로 이동했는지만 알면 충분하므로
+ * 값이 실릴 수 있는 부분 전체를 버린다.
+ *
+ * 파싱 불가한 입력은 `"?"`/`"#"` 첫 등장 위치로 자르는 폴백을 쓴다 — 이 함수는
+ * 어떤 입력에도 throw 하지 않는다(로그 경로에서 호출되므로).
+ */
+export function stripUrlQuery(url: string): string {
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    const cut = url.search(/[?#]/);
+    return cut === -1 ? url : url.slice(0, cut);
+  }
+}
+
 // R010 sensitive field patterns (key=value style in serialized objects/logs)
 const SENSITIVE_PATTERNS: Array<[RegExp, (match: string, key: string, val: string) => string]> = [
   [/(Authorization:\s*)([^\s,}]+)/g, (_, k, v) => `${k}${maskToken(v)}`],
