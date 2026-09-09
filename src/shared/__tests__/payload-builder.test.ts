@@ -10,9 +10,9 @@ import type { FormSchema, Profile } from "../types";
 // ── Fixture ───────────────────────────────────────────────────────────────────
 
 const baseSchema: FormSchema = {
-  eventPublicId: "66195918a9c0",
-  artistName: "NCT WISH",
-  artistCode: "NCTWISH",
+  eventPublicId: "aabbccddee00",
+  artistName: "TEST ARTIST",
+  artistCode: "TESTART",
   officialMembershipResponse: [],
   languages: ["ko"],
   primaryLanguage: "ko",
@@ -65,9 +65,9 @@ const baseSchema: FormSchema = {
 };
 
 const baseProfile: Profile = {
-  fanId: 6871442,
-  phone: "01044847010",
-  birthDate: "1993-08-03",
+  fanId: 1234567,
+  phone: "01012345678",
+  birthDate: "2000-01-15",
 };
 
 const baseRewards: RewardSelection[] = [{ rewardGroupId: 3895, rewardIds: [4116] }];
@@ -76,23 +76,23 @@ const baseRewards: RewardSelection[] = [{ rewardGroupId: 3895, rewardIds: [4116]
 
 describe("parsePhone", () => {
   it("digits only → KR 82 assumed", () => {
-    const r = parsePhone("01044847010");
-    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "01044847010" });
+    const r = parsePhone("01012345678");
+    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "01012345678" });
   });
 
   it("strips hyphens from local number", () => {
-    const r = parsePhone("010-4484-7010");
-    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "01044847010" });
+    const r = parsePhone("010-1234-5678");
+    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "01012345678" });
   });
 
   it("+82 prefix stripped correctly", () => {
-    const r = parsePhone("+821044847010");
-    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "1044847010" });
+    const r = parsePhone("+821012345678");
+    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "1012345678" });
   });
 
   it("+82 with hyphens stripped", () => {
-    const r = parsePhone("+82-10-4484-7010");
-    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "1044847010" });
+    const r = parsePhone("+82-10-1234-5678");
+    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "1012345678" });
   });
 
   it("+1 US number", () => {
@@ -106,8 +106,8 @@ describe("parsePhone", () => {
   });
 
   it("0082 prefix normalised to +82", () => {
-    const r = parsePhone("00821044847010");
-    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "1044847010" });
+    const r = parsePhone("00821012345678");
+    expect(r).toEqual({ phoneCountryCode: "82", phoneNumber: "1012345678" });
   });
 });
 
@@ -115,20 +115,20 @@ describe("parsePhone", () => {
 
 describe("normalizeBirthDate", () => {
   it("already YYYY-MM-DD → unchanged", () => {
-    expect(normalizeBirthDate("1993-08-03")).toBe("1993-08-03");
+    expect(normalizeBirthDate("2000-01-15")).toBe("2000-01-15");
   });
 
   it("slash format → hyphens", () => {
-    expect(normalizeBirthDate("1993/08/03")).toBe("1993-08-03");
+    expect(normalizeBirthDate("2000/01/15")).toBe("2000-01-15");
   });
 
   it("no separator YYYYMMDD → YYYY-MM-DD", () => {
-    expect(normalizeBirthDate("19930803")).toBe("1993-08-03");
+    expect(normalizeBirthDate("20000115")).toBe("2000-01-15");
   });
 
   it("invalid format → throws", () => {
-    expect(() => normalizeBirthDate("93-08-03")).toThrow("birthDate 형식 오류");
-    expect(() => normalizeBirthDate("1993.08.03")).toThrow("birthDate 형식 오류");
+    expect(() => normalizeBirthDate("00-01-15")).toThrow("birthDate 형식 오류");
+    expect(() => normalizeBirthDate("2000.01.15")).toThrow("birthDate 형식 오류");
   });
 });
 
@@ -144,13 +144,13 @@ describe("buildApplyPayload — golden path", () => {
     });
 
     expect(payload).toEqual({
-      artistCode: "NCTWISH",
-      eventPublicId: "66195918a9c0",
+      artistCode: "TESTART",
+      eventPublicId: "aabbccddee00",
       application: {
-        birthDate: "1993-08-03",
+        birthDate: "2000-01-15",
         applicantPhoneNumber: {
           phoneCountryCode: "82",
-          phoneNumber: "01044847010",
+          phoneNumber: "01012345678",
         },
         applicationConsentIds: [3983, 3984],
         applyRewards: [{ rewardGroupId: 3895, rewardIds: [4116] }],
@@ -162,21 +162,21 @@ describe("buildApplyPayload — golden path", () => {
   it("normalises slash birthDate", () => {
     const payload = buildApplyPayload({
       schema: baseSchema,
-      profile: { ...baseProfile, birthDate: "1993/08/03" },
+      profile: { ...baseProfile, birthDate: "2000/01/15" },
       rewardSelections: baseRewards,
       consentIds: [3983, 3984],
     });
-    expect(payload.application.birthDate).toBe("1993-08-03");
+    expect(payload.application.birthDate).toBe("2000-01-15");
   });
 
   it("strips hyphens from phone", () => {
     const payload = buildApplyPayload({
       schema: baseSchema,
-      profile: { ...baseProfile, phone: "010-4484-7010" },
+      profile: { ...baseProfile, phone: "010-1234-5678" },
       rewardSelections: baseRewards,
       consentIds: [3983, 3984],
     });
-    expect(payload.application.applicantPhoneNumber.phoneNumber).toBe("01044847010");
+    expect(payload.application.applicantPhoneNumber.phoneNumber).toBe("01012345678");
     expect(payload.application.applicantPhoneNumber.phoneCountryCode).toBe("82");
   });
 
@@ -274,7 +274,7 @@ describe("buildApplyPayload — error paths", () => {
     expect(() =>
       buildApplyPayload({
         schema: baseSchema,
-        profile: { ...baseProfile, birthDate: "1993.08.03" },
+        profile: { ...baseProfile, birthDate: "2000.01.15" },
         rewardSelections: baseRewards,
         consentIds: [3983, 3984],
       })
